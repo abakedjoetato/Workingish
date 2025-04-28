@@ -156,6 +156,21 @@ async def create_player_stats_embed(player, extended_stats=None):
             value=f"Linked to <@{player.discord_id}>"
         )
     
+    # Add rivalries information directly from player object
+    # Prey - Player killed most often
+    if player.prey_id and player.prey_name and player.prey_kills > 0:
+        embed.add_field(
+            name="Prey",
+            value=f"**{player.prey_name}** ({player.prey_kills} kills)"
+        )
+    
+    # Nemesis - Player killed by most often
+    if player.nemesis_id and player.nemesis_name and player.nemesis_deaths > 0:
+        embed.add_field(
+            name="Nemesis",
+            value=f"**{player.nemesis_name}** ({player.nemesis_deaths} deaths)"
+        )
+    
     # Add extended stats if available
     if extended_stats:
         # Top weapons
@@ -169,27 +184,48 @@ async def create_player_stats_embed(player, extended_stats=None):
                 value=weapons_text if weapons_text else "No weapon data"
             )
         
-        # Most killed players
+        # Most Killed Players (Beyond Prey)
         if extended_stats["victims"]:
+            # Still include victims list
             victims_text = ""
+            counter = 0
             for victim_name, stats in extended_stats["victims"].items():
+                # Skip if this is the prey (already shown above)
+                if player.prey_name and victim_name == player.prey_name:
+                    continue
+                    
                 victims_text += f"{victim_name}: {stats['kills']} times\n"
+                counter += 1
+                if counter >= 3:  # Limit to top 3 non-prey victims
+                    break
             
-            embed.add_field(
-                name="Most Killed",
-                value=victims_text if victims_text else "No data"
-            )
+            if victims_text:
+                embed.add_field(
+                    name="Other Victims",
+                    value=victims_text
+                )
         
-        # Killed by
+        # Players who killed this player (Beyond Nemesis)
         if extended_stats["killed_by"]:
+            # Still include killed by list
             killers_text = ""
+            counter = 0
             for killer_name, stats in extended_stats["killed_by"].items():
+                # Skip if this is the nemesis (already shown above)
+                if player.nemesis_name and killer_name == player.nemesis_name:
+                    continue
+                    
                 killers_text += f"{killer_name}: {stats['deaths']} times\n"
+                counter += 1
+                if counter >= 3:  # Limit to top 3 non-nemesis killers
+                    break
             
-            embed.add_field(
-                name="Killed By",
-                value=killers_text if killers_text else "No data"
-            )
+            if killers_text:
+                embed.add_field(
+                    name="Other Killers",
+                    value=killers_text
+                )
+        
         
         # Longest kill
         if extended_stats["longest_kill"]:
@@ -213,11 +249,10 @@ async def create_player_stats_embed(player, extended_stats=None):
                 value=recent_text if recent_text else "No recent kills"
             )
     
-    # Add player timestamps
+    # Add player info
     embed.add_field(
         name="Player Info",
-        value=f"First Seen: {player.first_seen.strftime('%Y-%m-%d')}\n"
-              f"Last Seen: {player.last_seen.strftime('%Y-%m-%d')}"
+        value=f"Player ID: {player.player_id}"
     )
     
     # Set footer
@@ -585,5 +620,95 @@ async def create_batch_progress_embed(server_name, memory):
     
     # Add server ID as footer
     embed.set_footer(text=f"Server ID: {memory.server_id}")
+    
+    return embed
+
+
+async def create_faction_embed(faction, guild, member_stats=None):
+    """
+    Create an embed for faction information
+    
+    Args:
+        faction: Faction object
+        guild: Discord guild object
+        member_stats: Optional dictionary with combined member stats
+        
+    Returns:
+        discord.Embed: Faction information embed
+    """
+    # Get the faction role
+    role = discord.utils.get(guild.roles, id=int(faction.role_id)) if faction.role_id else None
+    role_mention = role.mention if role else "No role"
+    
+    # Create embed
+    embed = discord.Embed(
+        title=f"Faction: {faction.name} [{faction.abbreviation}]",
+        description=f"Guild: {guild.name}",
+        color=role.color if role else discord.Color(COLORS["primary"])
+    )
+    
+    # Add leader info
+    leader_id = faction.leader_id
+    embed.add_field(
+        name="Leader",
+        value=f"<@{leader_id}>"
+    )
+    
+    # Add member count
+    embed.add_field(
+        name="Members",
+        value=f"{len(faction.members)} members"
+    )
+    
+    # Add role info
+    embed.add_field(
+        name="Role",
+        value=role_mention
+    )
+    
+    # Add member stats if provided
+    if member_stats:
+        total_kills = member_stats.get("total_kills", 0)
+        total_deaths = member_stats.get("total_deaths", 0)
+        kd_ratio = total_kills / max(1, total_deaths)
+        top_weapon = member_stats.get("top_weapon", "None")
+        
+        stats_text = (
+            f"Total Kills: **{total_kills}**\n"
+            f"Total Deaths: **{total_deaths}**\n"
+            f"K/D Ratio: **{kd_ratio:.2f}**\n"
+            f"Top Weapon: **{top_weapon}**"
+        )
+        
+        embed.add_field(
+            name="Faction Stats",
+            value=stats_text,
+            inline=False
+        )
+    
+    # Add member list (up to 10 to avoid embed being too large)
+    if faction.members:
+        members_text = ""
+        for i, member_id in enumerate(faction.members[:10]):
+            members_text += f"<@{member_id}>\n"
+        
+        if len(faction.members) > 10:
+            members_text += f"... and {len(faction.members) - 10} more"
+            
+        embed.add_field(
+            name="Member List",
+            value=members_text,
+            inline=False
+        )
+    
+    # Add creation date
+    if faction.created_at:
+        embed.add_field(
+            name="Created At",
+            value=faction.created_at.strftime("%Y-%m-%d %H:%M")
+        )
+    
+    # Set footer
+    embed.set_footer(text=f"Faction ID: {faction._id}")
     
     return embed

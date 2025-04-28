@@ -191,6 +191,25 @@ class CSVParser:
             victim_id: SteamID of the victim
             victim_name: Name of the victim
         """
+        # Skip processing if this is self-inflicted (suicide)
+        is_suicide = killer_id == victim_id
+        
+        # Get or create the kill object for rivalry tracking
+        kill_event = None
+        if not is_suicide:
+            # We'll use this kill event object to update rivalry data
+            kill_event = Kill(
+                timestamp=datetime.utcnow(),  # This is just for the object, not for storage
+                killer_id=killer_id,
+                killer_name=killer_name,
+                victim_id=victim_id, 
+                victim_name=victim_name,
+                weapon="",  # Not needed for rivalry tracking
+                distance=0, # Not needed for rivalry tracking
+                server_id=self.server_id,
+                is_suicide=is_suicide
+            )
+        
         # Update killer stats
         if killer_id:
             killer = await Player.get_by_player_id(db, killer_id)
@@ -205,10 +224,14 @@ class CSVParser:
                     killer.player_name = killer_name
                 
                 # Increment kills (only if not a suicide)
-                if killer_id != victim_id:
+                if not is_suicide:
                     killer.total_kills += 1
                 
                 await killer.update(db)
+            
+            # Update rivalry tracking for killer (when they kill someone)
+            if kill_event and not is_suicide:
+                await killer.update_rivalry_data(db, kill_event=kill_event)
         
         # Update victim stats
         if victim_id:
@@ -228,6 +251,10 @@ class CSVParser:
                 victim.total_deaths += 1
                 
                 await victim.update(db)
+            
+            # Update rivalry tracking for victim (when they are killed)
+            if kill_event and not is_suicide:
+                await victim.update_rivalry_data(db, death_event=kill_event)
             
     async def set_auto_parsing(self, enabled):
         """

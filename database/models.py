@@ -119,15 +119,27 @@ class Player:
     collection_name = "players"
     
     def __init__(self, player_id, player_name, discord_id=None,
-                total_kills=0, total_deaths=0, first_seen=None, last_seen=None,
+                total_kills=0, total_deaths=0, faction_id=None, 
+                prey_id=None, prey_name=None, prey_kills=0,
+                nemesis_id=None, nemesis_name=None, nemesis_deaths=0,
                 _id=None):
         self.player_id = player_id
         self.player_name = player_name
         self.discord_id = discord_id
         self.total_kills = total_kills
         self.total_deaths = total_deaths
-        self.first_seen = first_seen or datetime.utcnow()
-        self.last_seen = last_seen or datetime.utcnow()
+        self.faction_id = faction_id
+        
+        # Rivalry system - Prey (player killed most by this player)
+        self.prey_id = prey_id
+        self.prey_name = prey_name
+        self.prey_kills = prey_kills
+        
+        # Rivalry system - Nemesis (player killed by most)
+        self.nemesis_id = nemesis_id
+        self.nemesis_name = nemesis_name
+        self.nemesis_deaths = nemesis_deaths
+        
         self._id = _id
         
     @classmethod
@@ -169,13 +181,61 @@ class Player:
     
     async def update(self, db):
         """Update player in the database"""
-        self.last_seen = datetime.utcnow()
         data = self.to_dict()
         collection = await db.get_collection(self.collection_name)
         await collection.update_one(
             {"_id": self._id},
             {"$set": data}
         )
+    
+    async def update_rivalry_data(self, db, kill_event=None, death_event=None):
+        """
+        Update rivalry data (prey/nemesis) based on kill events.
+        
+        Args:
+            db: Database connection
+            kill_event: Optional Kill object where this player is the killer
+            death_event: Optional Kill object where this player is the victim
+        """
+        if kill_event:
+            # Process kill - update prey data
+            victim_id = kill_event.victim_id
+            victim_name = kill_event.victim_name
+            
+            # Get current kill stats against this victim
+            collection = await db.get_collection("kills")
+            kill_count = await collection.count_documents({
+                "killer_id": self.player_id,
+                "victim_id": victim_id,
+                "is_suicide": False
+            })
+            
+            # Update prey if this victim has been killed more times than the current prey
+            if kill_count > self.prey_kills or not self.prey_id:
+                self.prey_id = victim_id
+                self.prey_name = victim_name
+                self.prey_kills = kill_count
+                await self.update(db)
+        
+        if death_event:
+            # Process death - update nemesis data
+            killer_id = death_event.killer_id
+            killer_name = death_event.killer_name
+            
+            # Get current death stats from this killer
+            collection = await db.get_collection("kills")
+            death_count = await collection.count_documents({
+                "killer_id": killer_id,
+                "victim_id": self.player_id,
+                "is_suicide": False
+            })
+            
+            # Update nemesis if this killer has killed the player more times than the current nemesis
+            if death_count > self.nemesis_deaths or not self.nemesis_id:
+                self.nemesis_id = killer_id
+                self.nemesis_name = killer_name
+                self.nemesis_deaths = death_count
+                await self.update(db)
         
     def to_dict(self):
         """Convert instance to dictionary for database storage"""
@@ -438,6 +498,139 @@ class ParserMemory:
             {"$set": data}
         )
         
+    def to_dict(self):
+        """Convert instance to dictionary for database storage"""
+        result = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        return result
+
+
+class Faction:
+    """Model for player factions"""
+    collection_name = "factions"
+    
+    def __init__(self, name, abbreviation, guild_id, leader_id, 
+                 members=None, created_at=None, role_id=None, _id=None):
+        self.name = name
+        self.abbreviation = abbreviation[:3].upper()  # Ensure it's only 3 chars, uppercase
+        self.guild_id = guild_id
+        self.leader_id = leader_id
+        self.members = members or []  # List of discord_ids
+        self.created_at = created_at or datetime.utcnow()
+        self.role_id = role_id
+        self._id = _id
+    
+    @classmethod
+    async def create(cls, db, **kwargs):
+        """Create a new faction in the database"""
+        faction = cls(**kwargs)
+        collection = await db.get_collection(cls.collection_name)
+        result = await collection.insert_one(faction.to_dict())
+        faction._id = result.inserted_id
+        return faction
+    
+    @classmethod
+    async def get_by_id(cls, db, faction_id):
+        """Get a faction by ID"""
+        collection = await db.get_collection(cls.collection_name)
+        if isinstance(faction_id, str):
+            from bson import ObjectId
+            try:
+                faction_id = ObjectId(faction_id)
+            except:
+                return None
+                
+        data = await collection.find_one({"_id": faction_id})
+        if data:
+            # Use MongoDB's _id
+            id_value = data.get("_id")
+            if id_value:
+                return cls(**{**data, "_id": id_value})
+        return None
+    
+    @classmethod
+    async def get_by_name(cls, db, name, guild_id):
+        """Get a faction by name in a specific guild"""
+        collection = await db.get_collection(cls.collection_name)
+        data = await collection.find_one({
+            "name": name,
+            "guild_id": guild_id
+        })
+        if data:
+            # Use MongoDB's _id
+            id_value = data.get("_id")
+            if id_value:
+                return cls(**{**data, "_id": id_value})
+        return None
+    
+    @classmethod
+    async def get_by_abbreviation(cls, db, abbreviation, guild_id):
+        """Get a faction by abbreviation in a specific guild"""
+        collection = await db.get_collection(cls.collection_name)
+        data = await collection.find_one({
+            "abbreviation": abbreviation.upper(),
+            "guild_id": guild_id
+        })
+        if data:
+            # Use MongoDB's _id
+            id_value = data.get("_id")
+            if id_value:
+                return cls(**{**data, "_id": id_value})
+        return None
+    
+    @classmethod
+    async def get_by_member(cls, db, member_id, guild_id):
+        """Get a faction a member belongs to in a specific guild"""
+        collection = await db.get_collection(cls.collection_name)
+        data = await collection.find_one({
+            "members": member_id,
+            "guild_id": guild_id
+        })
+        if data:
+            # Use MongoDB's _id
+            id_value = data.get("_id")
+            if id_value:
+                return cls(**{**data, "_id": id_value})
+        return None
+    
+    @classmethod
+    async def get_all_for_guild(cls, db, guild_id):
+        """Get all factions in a specific guild"""
+        collection = await db.get_collection(cls.collection_name)
+        cursor = collection.find({"guild_id": guild_id})
+        factions = []
+        
+        # Get all matching documents
+        docs = await cursor.to_list(None)
+        for data in docs:
+            # MongoDB already has _id
+            id_value = data.get("_id")
+            if id_value:
+                factions.append(cls(**{**data, "_id": id_value}))
+        return factions
+    
+    async def update(self, db):
+        """Update faction in the database"""
+        data = self.to_dict()
+        collection = await db.get_collection(self.collection_name)
+        await collection.update_one(
+            {"_id": self._id},
+            {"$set": data}
+        )
+    
+    async def delete(self, db):
+        """Delete faction from the database"""
+        collection = await db.get_collection(self.collection_name)
+        await collection.delete_one({"_id": self._id})
+        
+        # Update all players to remove faction reference
+        player_collection = await db.get_collection(Player.collection_name)
+        await player_collection.update_many(
+            {"faction_id": str(self._id)},
+            {"$set": {"faction_id": None}}
+        )
+        
+        return True
+    
     def to_dict(self):
         """Convert instance to dictionary for database storage"""
         result = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}

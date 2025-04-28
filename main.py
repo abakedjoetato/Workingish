@@ -11,6 +11,7 @@ from cogs.killfeed_commands import KillfeedCommands
 from cogs.connection_commands import ConnectionCommands
 from cogs.mission_commands import MissionCommands
 from cogs.admin_commands import AdminCommands
+from cogs.faction_commands import FactionCommands
 
 # Import Flask app for Gunicorn
 from app import app
@@ -71,6 +72,7 @@ async def help_command(ctx):
         name="Main Command Groups",
         value="- `/server` - Server management commands\n"
               "- `/stats` - Statistics commands\n"
+              "- `/faction_create`, `/faction_info`, etc. - Faction management commands\n"
               "- `/killfeed` - Killfeed notification commands\n"
               "- `/connections` - Connection notification commands\n"
               "- `/missions` - Mission notification commands\n"
@@ -182,7 +184,8 @@ async def load_cogs():
         KillfeedCommands,
         ConnectionCommands,
         MissionCommands,
-        AdminCommands
+        AdminCommands,
+        FactionCommands
     ]
     
     loaded_count = 0

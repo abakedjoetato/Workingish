@@ -395,7 +395,7 @@ class StatsCommands(commands.Cog):
             return stats
         
         try:
-            # Get weapon stats
+            # Get weapon stats - simplified tracking
             weapon_pipeline = [
                 {"$match": {"killer_id": player_id}},
                 {"$group": {
