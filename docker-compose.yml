@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    build: .
+    container_name: emerald-discord-bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    environment:
+      - TZ=UTC
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
