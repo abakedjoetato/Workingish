@@ -32,6 +32,10 @@ class ServerCommands(commands.Cog):
         if not self.db and hasattr(self.bot, 'db'):
             self.db = self.bot.db
             logger.debug("Set database for ServerCommands cog from bot")
+            
+    # This function is needed to expose the commands to the bot
+    def get_commands(self):
+        return [server_group]
     
     @server_group.command(name="add", description="Add a new server to monitor")
     async def add_server(self, ctx,
@@ -333,5 +337,7 @@ class ServerCommands(commands.Cog):
             await ctx.respond(f"⚠️ An error occurred: {e}")
 
 def setup(bot):
+    """Add the cog to the bot directly when loaded via extension"""
     bot.add_application_command(server_group)
     bot.add_cog(ServerCommands(bot))
+    return True

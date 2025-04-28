@@ -5,7 +5,7 @@ import asyncio
 from discord.ext import commands, tasks
 from config import TOKEN, PREFIX, LOGGING_LEVEL
 from database.connection import Database
-from cogs.server_commands_slash import ServerCommands
+from cogs.server_commands_slash import ServerCommands, server_group
 from cogs.stats_commands import StatsCommands
 from cogs.killfeed_commands import KillfeedCommands
 from cogs.connection_commands import ConnectionCommands
@@ -37,7 +37,7 @@ bot = commands.Bot(
     command_prefix=commands.when_mentioned_or(PREFIX),  # Will be ignored as we're using slash commands only
     intents=intents,
     description="Deadside Game Server Monitoring Bot",
-    sync_commands=True,  # Automatically sync commands on startup
+    sync_commands=False,  # We'll manually sync commands after loading all cogs
     sync_commands_debug=True,  # Enable debug output for command sync
 )
 
@@ -140,6 +140,35 @@ async def on_ready():
     # Load cogs after database is established
     await load_cogs()
     
+    # Manually add the server command group
+    try:
+        bot.add_application_command(server_group)
+        logger.info(f"Successfully registered server command group")
+    except Exception as e:
+        logger.error(f"Failed to register server group: {e}")
+    
+    # Sync slash commands with Discord - MUST happen after cogs are loaded
+    await sync_slash_commands()
+    
+    # Log all registered commands from application_commands 
+    # application_commands is the property that contains slash commands
+    all_commands = bot.application_commands
+    command_count = len(all_commands)
+    command_names = [f"{cmd.name}" for cmd in all_commands]
+    
+    # Debug: Check for SlashCommandGroups in application_commands
+    for cmd in all_commands:
+        logger.info(f"Command: {cmd.name}, Type: {type(cmd).__name__}")
+        # If it's a group, log all subcommands
+        if hasattr(cmd, 'subcommands'):
+            subcmd_names = [f"{subcmd.name}" for subcmd in cmd.subcommands]
+            if subcmd_names:
+                logger.info(f" - Subcommands for {cmd.name}: {', '.join(subcmd_names)}")
+    
+    logger.info(f"Bot is fully ready with {command_count} registered commands")
+    if command_count > 0:
+        logger.info(f"Available commands: {', '.join(command_names)}")
+    
     # Start background tasks
     check_parsers.start()
     
@@ -150,17 +179,6 @@ async def on_ready():
             name=f"Deadside Servers | /server"
         )
     )
-    
-    # Log all available commands for debugging
-    all_commands = list(bot.commands)
-    command_count = len(all_commands)
-    command_names = [f"{cmd.name}" for cmd in all_commands]
-    logger.info(f"Bot is fully ready with {command_count} registered commands")
-    if command_count > 0:
-        logger.info(f"Available commands: {', '.join(command_names)}")
-        
-    # Sync slash commands with Discord
-    await sync_slash_commands()
 
 async def load_cogs():
     """Load all cogs for the bot"""
