@@ -670,10 +670,10 @@ async def commands_menu(ctx):
     # Get all registered commands
     all_commands = bot.application_commands
     
-    # Create main embed with emerald-themed styling
+    # Create main embed with enhanced emerald-themed styling
     embed = discord.Embed(
-        title="🔸 Emerald PVP Command Guide 🔸",
-        description="Welcome to the Emerald Servers bot! Here are the commands to help you survive and thrive:",
+        title="💎 Emerald PVP Survival Command Guide 💎",
+        description="**Welcome to the Deadside Emerald Servers!**\n*These commands will help you survive, track your kills, and dominate the wasteland:*",
         color=0x2ecc71  # Emerald green color
     )
     

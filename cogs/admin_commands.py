@@ -155,11 +155,11 @@ class AdminCommands(commands.Cog):
                 tier = await db.get_guild_premium_tier(ctx.guild.id)
                 embed.add_field(name="Premium Tier", value=tier, inline=True)
             
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
         
         except Exception as e:
             logger.error(f"Error getting bot stats: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @admin_group.command(name="premium", description="View or set the premium tier for a guild")
     async def set_premium(self, ctx, 
@@ -168,7 +168,7 @@ class AdminCommands(commands.Cog):
         """
         View or set the premium tier for a guild
         
-        Usage: !admin premium [guild_id] [tier]
+        Usage: /admin premium [guild_id] [tier]
         
         Available tiers: survivor, warlord, overseer
         If no tier is provided, the current tier will be shown.
@@ -257,9 +257,9 @@ class AdminCommands(commands.Cog):
         """
         Link a Discord member to a game player
         
-        Usage: !admin link @user <player_name>
+        Usage: /admin link @user <player_name>
         
-        This allows users to see their own stats with !stats me
+        This allows users to see their own stats with /stats me
         """
         try:
             db = await Database.get_instance()
@@ -285,7 +285,7 @@ class AdminCommands(commands.Cog):
             # Send DM to user
             try:
                 await member.send(f"Your Deadside game account '{player.player_name}' has been linked to your Discord account. "
-                                 f"You can now use `!stats me` to view your in-game statistics.")
+                                 f"You can now use `/stats me` to view your in-game statistics.")
             except:
                 # User might have DMs disabled
                 pass
@@ -301,7 +301,7 @@ class AdminCommands(commands.Cog):
         """
         Unlink a Discord member from a game player
         
-        Usage: !admin unlink @user [player_name]
+        Usage: /admin unlink @user [player_name]
         
         If player_name is provided, only that specific link is removed.
         Otherwise, all player links for the user are removed.
@@ -336,11 +336,11 @@ class AdminCommands(commands.Cog):
                     {"$set": {"discord_id": None}}
                 )
                 
-                await ctx.send(f"✅ Unlinked {result.modified_count} players from Discord user {member.mention}")
+                await ctx.respond(f"✅ Unlinked {result.modified_count} players from Discord user {member.mention}")
         
         except Exception as e:
             logger.error(f"Error unlinking player: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @admin_group.command(name="cleanup", description="Clean up old data from the database")
     async def cleanup_data(self, ctx, 
@@ -350,14 +350,14 @@ class AdminCommands(commands.Cog):
         """
         Clean up old data from the database
         
-        Usage: !admin cleanup [data_type] [days]
+        Usage: /admin cleanup [data_type] [days]
         
         data_type: Type of data to clean up (parsers, connections, kills)
         days: Age of data to remove (in days)
         """
         try:
             if days < 1:
-                await ctx.send("⚠️ Days must be at least 1.")
+                await ctx.respond("⚠️ Days must be at least 1.")
                 return
             
             db = await Database.get_instance()
@@ -389,15 +389,15 @@ class AdminCommands(commands.Cog):
                 message = f"Cleaned up {result.deleted_count} old kill events."
             
             else:
-                await ctx.send("⚠️ Invalid data type. Available types: parsers, connections, kills")
+                await ctx.respond("⚠️ Invalid data type. Available types: parsers, connections, kills")
                 return
             
             logger.info(message)
-            await ctx.send(f"✅ {message}")
+            await ctx.respond(f"✅ {message}")
         
         except Exception as e:
             logger.error(f"Error cleaning up data: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @admin_group.command(name="home", description="Set or view the home guild (bot owner only)")
     async def set_home_guild_command(self, ctx, 
@@ -405,7 +405,7 @@ class AdminCommands(commands.Cog):
         """
         Set or view the home guild
         
-        Usage: !admin home [guild_id]
+        Usage: /admin home [guild_id]
         
         If no guild_id is provided, the current home guild info will be shown.
         This command can only be used by the bot owner.
@@ -418,7 +418,7 @@ class AdminCommands(commands.Cog):
                 home_guild_id = await db.get_home_guild_id()
                 
                 if home_guild_id is None:
-                    await ctx.send("⚠️ No home guild is currently set.")
+                    await ctx.respond("⚠️ No home guild is currently set.")
                     return
                 
                 home_guild = self.bot.get_guild(home_guild_id)
@@ -430,31 +430,31 @@ class AdminCommands(commands.Cog):
                     color=discord.Color.gold()
                 )
                 
-                await ctx.send(embed=embed)
+                await ctx.respond(embed=embed)
                 return
             
             # Set new home guild
             success = await set_home_guild(guild_id, ctx)
             if not success:
-                await ctx.send(f"⚠️ Failed to set guild {guild_id} as home guild.")
+                await ctx.respond(f"⚠️ Failed to set guild {guild_id} as home guild.")
         
         except Exception as e:
             logger.error(f"Error in home guild command: {e}")
-            await ctx.send(f"Error setting home guild: {e}")
+            await ctx.respond(f"Error setting home guild: {e}")
     
     @admin_group.command(name="purge", description="Purge all data for this guild (requires confirmation)")
     async def purge_guild_data(self, ctx):
         """
         Purge all data for this guild (requires confirmation)
         
-        Usage: !admin purge
+        Usage: /admin purge
         
         This will remove ALL servers, parser states, and guild configuration.
         Player data and statistics will NOT be removed.
         """
         try:
             # Confirm deletion
-            confirm_msg = await ctx.send("⚠️ **DANGER!** This will delete ALL server configurations, parser states, and guild settings for this guild. "
+            confirm_msg = await ctx.respond("⚠️ **DANGER!** This will delete ALL server configurations, parser states, and guild settings for this guild. "
                                         "Player data and statistics will be preserved. This action cannot be undone!\n\n"
                                         "Type `confirm` to proceed or `cancel` to abort.")
             
@@ -466,7 +466,7 @@ class AdminCommands(commands.Cog):
                 response = await self.bot.wait_for('message', timeout=30.0, check=check)
                 
                 if response.content.lower() == "cancel":
-                    await ctx.send("Purge operation cancelled.")
+                    await ctx.respond("Purge operation cancelled.")
                     return
                 
                 # Proceed with purge
@@ -491,25 +491,25 @@ class AdminCommands(commands.Cog):
                 result_config = await config_collection.delete_many({"guild_id": ctx.guild.id})
                 
                 # Send summary
-                await ctx.send(f"✅ Purge completed:\n"
+                await ctx.respond(f"✅ Purge completed:\n"
                               f"- Deleted {result_servers.deleted_count} servers\n"
                               f"- Deleted {result_parsers.deleted_count} parser states\n"
                               f"- Deleted {result_config.deleted_count} guild configurations\n\n"
                               f"Player data and statistics have been preserved.")
                 
             except asyncio.TimeoutError:
-                await ctx.send("Purge operation timed out.")
+                await ctx.respond("Purge operation timed out.")
                 
         except Exception as e:
             logger.error(f"Error purging guild data: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
             
     @admin_group.command(name="features", description="Display all available features by premium tier")
     async def show_features(self, ctx):
         """
         Display all available features by premium tier
         
-        Usage: !admin features
+        Usage: /admin features
         
         Shows a comparison of features available in each premium tier.
         """
@@ -589,12 +589,12 @@ class AdminCommands(commands.Cog):
                 inline=False
             )
             
-            embed.set_footer(text="Use !admin premium to view your current tier details")
-            await ctx.send(embed=embed)
+            embed.set_footer(text="Use /admin premium to view your current tier details")
+            await ctx.respond(embed=embed)
             
         except Exception as e:
             logger.error(f"Error in features command: {e}")
-            await ctx.send(f"Error displaying features: {e}")
+            await ctx.respond(f"Error displaying features: {e}")
     
     def _format_feature_value(self, value):
         """Helper method to format feature values for the comparison table"""

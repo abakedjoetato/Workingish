@@ -32,8 +32,8 @@ class ServerCommands(commands.Cog):
     @commands.group(name="server", invoke_without_command=True)
     @commands.has_permissions(manage_guild=True)
     async def server(self, ctx):
-        """Server management commands. Use !server add to add a new server"""
-        await ctx.send("Available commands: `add`, `list`, `remove`, `info`, `update`")
+        """Server management commands. Use /server add to add a new server"""
+        await ctx.respond("Available commands: `add`, `list`, `remove`, `info`, `update`")
     
     @server.command(name="add")
     @commands.has_permissions(manage_guild=True)
@@ -42,7 +42,7 @@ class ServerCommands(commands.Cog):
         """
         Add a new server to monitor
         
-        Usage: !server add <name> <ip> <port> <log_path> [access_method]
+        Usage: /server add <name> <ip> <port> <log_path> [access_method]
         
         Arguments:
           name: A name for the server
@@ -52,18 +52,18 @@ class ServerCommands(commands.Cog):
           access_method: How to access logs (local/sftp), default: local
         
         Example:
-          !server add "My Server" 192.168.1.100 15000 /path/to/logs sftp
+          /server add "My Server" 192.168.1.100 15000 /path/to/logs sftp
         """
         try:
             # Check if access_method is valid
             if access_method not in ["local", "sftp"]:
-                await ctx.send("⚠️ Invalid access method. Choose either 'local' or 'sftp'.")
+                await ctx.respond("⚠️ Invalid access method. Choose either 'local' or 'sftp'.")
                 return
             
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in add_server command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
             
             # Check if we have reached server limit
@@ -75,7 +75,7 @@ class ServerCommands(commands.Cog):
             premium_limits = await get_premium_limits(guild_config.premium_tier)
             
             if len(existing_servers) >= premium_limits["max_servers"]:
-                await ctx.send(f"⚠️ You have reached the maximum number of servers for your plan ({premium_limits['max_servers']}). "
+                await ctx.respond(f"⚠️ You have reached the maximum number of servers for your plan ({premium_limits['max_servers']}). "
                               f"Upgrade to add more servers or remove an existing server.")
                 return
             
@@ -91,14 +91,14 @@ class ServerCommands(commands.Cog):
             
             # If it's SFTP, we'll need to follow up for credentials
             if access_method == "sftp":
-                await ctx.send("Server added! Since you selected SFTP access, please set up credentials using:\n"
-                              f"`!server credentials {name} <username> [password] [key_path]`")
+                await ctx.respond("Server added! Since you selected SFTP access, please set up credentials using:\n"
+                              f"`/server credentials {name} <username> [password] [key_path]`")
             else:
-                await ctx.send(f"✅ Server '{name}' added successfully! Use `!server info {name}` to view details.")
+                await ctx.respond(f"✅ Server '{name}' added successfully! Use `/server info {name}` to view details.")
                 
         except Exception as e:
             logger.error(f"Error adding server: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @server.command(name="list")
     async def list_servers(self, ctx):
@@ -107,13 +107,13 @@ class ServerCommands(commands.Cog):
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in list_servers command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             servers = await Server.get_by_guild(self.db, ctx.guild.id)
             
             if not servers:
-                await ctx.send("No servers have been configured yet. Use `!server add` to add a server.")
+                await ctx.respond("No servers have been configured yet. Use `/server add` to add a server.")
                 return
             
             embed = discord.Embed(
@@ -131,24 +131,24 @@ class ServerCommands(commands.Cog):
                     inline=True
                 )
             
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error listing servers: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @server.command(name="info")
     async def server_info(self, ctx, *, name: str):
         """
         Show detailed information about a server
         
-        Usage: !server info <name>
+        Usage: /server info <name>
         """
         try:
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in server_info command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             servers = await Server.get_by_guild(self.db, ctx.guild.id)
@@ -157,18 +157,18 @@ class ServerCommands(commands.Cog):
             server = next((s for s in servers if s.name.lower() == name.lower()), None)
             
             if not server:
-                await ctx.send(f"⚠️ Server '{name}' not found. Use `!server list` to see all configured servers.")
+                await ctx.respond(f"⚠️ Server '{name}' not found. Use `/server list` to see all configured servers.")
                 return
             
             # Get parser status
             parser_status = await ParserMemory.get_parser_status(server._id)
             
             embed = await create_server_embed(server, parser_status)
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error getting server info: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @server.command(name="remove")
     @commands.has_permissions(manage_guild=True)
@@ -176,13 +176,13 @@ class ServerCommands(commands.Cog):
         """
         Remove a server from monitoring
         
-        Usage: !server remove <name>
+        Usage: /server remove <name>
         """
         try:
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in remove_server command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             servers = await Server.get_by_guild(self.db, ctx.guild.id)
@@ -191,11 +191,11 @@ class ServerCommands(commands.Cog):
             server = next((s for s in servers if s.name.lower() == name.lower()), None)
             
             if not server:
-                await ctx.send(f"⚠️ Server '{name}' not found. Use `!server list` to see all configured servers.")
+                await ctx.respond(f"⚠️ Server '{name}' not found. Use `/server list` to see all configured servers.")
                 return
             
             # Confirm deletion
-            confirm_msg = await ctx.send(f"Are you sure you want to remove server '{server.name}'? This will delete all parser state but NOT the collected statistics. React with ✅ to confirm.")
+            confirm_msg = await ctx.respond(f"Are you sure you want to remove server '{server.name}'? This will delete all parser state but NOT the collected statistics. React with ✅ to confirm.")
             await confirm_msg.add_reaction("✅")
             
             def check(reaction, user):
@@ -212,14 +212,14 @@ class ServerCommands(commands.Cog):
                 parser_collection = await self.db.get_collection("parser_state")
                 await parser_collection.delete_many({"server_id": server._id})
                 
-                await ctx.send(f"✅ Server '{server.name}' has been removed.")
+                await ctx.respond(f"✅ Server '{server.name}' has been removed.")
                 
             except TimeoutError:
-                await ctx.send("Server removal cancelled.")
+                await ctx.respond("Server removal cancelled.")
                 
         except Exception as e:
             logger.error(f"Error removing server: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @server.command(name="update")
     @commands.has_permissions(manage_guild=True)
@@ -227,7 +227,7 @@ class ServerCommands(commands.Cog):
         """
         Update server settings
         
-        Usage: !server update <name> <setting> <value>
+        Usage: /server update <name> <setting> <value>
         
         Settings:
           name: New server name
@@ -238,14 +238,14 @@ class ServerCommands(commands.Cog):
           log_enabled: Enable log parsing (true/false)
         
         Example:
-          !server update "My Server" name "New Server Name"
-          !server update "My Server" log_enabled false
+          /server update "My Server" name "New Server Name"
+          /server update "My Server" log_enabled false
         """
         try:
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in update_server command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             servers = await Server.get_by_guild(self.db, ctx.guild.id)
@@ -254,7 +254,7 @@ class ServerCommands(commands.Cog):
             server = next((s for s in servers if s.name.lower() == name.lower()), None)
             
             if not server:
-                await ctx.send(f"⚠️ Server '{name}' not found. Use `!server list` to see all configured servers.")
+                await ctx.respond(f"⚠️ Server '{name}' not found. Use `/server list` to see all configured servers.")
                 return
             
             # Update based on setting
@@ -266,7 +266,7 @@ class ServerCommands(commands.Cog):
                 try:
                     server.port = int(value)
                 except ValueError:
-                    await ctx.send("⚠️ Port must be a number.")
+                    await ctx.respond("⚠️ Port must be a number.")
                     return
             elif setting.lower() == "log_path":
                 server.log_path = value
@@ -275,16 +275,16 @@ class ServerCommands(commands.Cog):
             elif setting.lower() == "log_enabled":
                 server.log_enabled = value.lower() in ["true", "yes", "1", "enable", "enabled"]
             else:
-                await ctx.send(f"⚠️ Unknown setting '{setting}'. Valid settings are: name, ip, port, log_path, csv_enabled, log_enabled")
+                await ctx.respond(f"⚠️ Unknown setting '{setting}'. Valid settings are: name, ip, port, log_path, csv_enabled, log_enabled")
                 return
             
             # Save changes
             await server.update(self.db)
-            await ctx.send(f"✅ Server '{server.name}' updated successfully.")
+            await ctx.respond(f"✅ Server '{server.name}' updated successfully.")
                 
         except Exception as e:
             logger.error(f"Error updating server: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @server.command(name="credentials")
     @commands.has_permissions(manage_guild=True)
@@ -292,7 +292,7 @@ class ServerCommands(commands.Cog):
         """
         Set SFTP credentials for a server (for SFTP access method)
         
-        Usage: !server credentials <name> <username> [password] [key_path]
+        Usage: /server credentials <name> <username> [password] [key_path]
         
         Note: For security, this command will be deleted after processing.
         """
@@ -306,7 +306,7 @@ class ServerCommands(commands.Cog):
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in set_credentials command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             servers = await Server.get_by_guild(self.db, ctx.guild.id)
@@ -315,11 +315,11 @@ class ServerCommands(commands.Cog):
             server = next((s for s in servers if s.name.lower() == name.lower()), None)
             
             if not server:
-                await ctx.send(f"⚠️ Server '{name}' not found. Use `!server list` to see all configured servers.")
+                await ctx.respond(f"⚠️ Server '{name}' not found. Use `/server list` to see all configured servers.")
                 return
             
             if server.access_method != "sftp":
-                await ctx.send(f"⚠️ Server '{name}' is not configured for SFTP access. Change the access method first.")
+                await ctx.respond(f"⚠️ Server '{name}' is not configured for SFTP access. Change the access method first.")
                 return
             
             # Update credentials
@@ -329,11 +329,11 @@ class ServerCommands(commands.Cog):
             
             # Save changes
             await server.update(self.db)
-            await ctx.send(f"✅ SFTP credentials for server '{server.name}' updated successfully.")
+            await ctx.respond(f"✅ SFTP credentials for server '{server.name}' updated successfully.")
                 
         except Exception as e:
             logger.error(f"Error setting credentials: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @server.command(name="reset")
     @commands.has_permissions(manage_guild=True)
@@ -341,13 +341,13 @@ class ServerCommands(commands.Cog):
         """
         Reset parsers for a server (to re-read logs from beginning)
         
-        Usage: !server reset <name>
+        Usage: /server reset <name>
         """
         try:
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in reset_parsers command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             servers = await Server.get_by_guild(self.db, ctx.guild.id)
@@ -356,14 +356,14 @@ class ServerCommands(commands.Cog):
             server = next((s for s in servers if s.name.lower() == name.lower()), None)
             
             if not server:
-                await ctx.send(f"⚠️ Server '{name}' not found. Use `!server list` to see all configured servers.")
+                await ctx.respond(f"⚠️ Server '{name}' not found. Use `/server list` to see all configured servers.")
                 return
             
             # Reset all parsers
             modified_count = await ParserMemory.reset_all_parsers(server._id)
             
-            await ctx.send(f"✅ Reset {modified_count} parsers for server '{server.name}'. The next parsing cycle will read logs from the beginning.")
+            await ctx.respond(f"✅ Reset {modified_count} parsers for server '{server.name}'. The next parsing cycle will read logs from the beginning.")
                 
         except Exception as e:
             logger.error(f"Error resetting parsers: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")

@@ -770,7 +770,7 @@ class StatsCommands(commands.Cog):
                     )
             
             # Set footer
-            embed.set_footer(text=f"Use !stats player <name> for detailed player stats")
+            embed.set_footer(text=f"Use /stats player <name> for detailed player stats")
             
             await ctx.respond(embed=embed)
                 
@@ -899,7 +899,7 @@ class StatsCommands(commands.Cog):
                     )
             
             # Set footer
-            embed.set_footer(text=f"Use !stats player <name> for detailed player stats")
+            embed.set_footer(text=f"Use /stats player <name> for detailed player stats")
             
             await ctx.respond(embed=embed)
                 
