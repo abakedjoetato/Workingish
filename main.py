@@ -30,9 +30,24 @@ from app import app
 async def register_commands_individually(bot, commands_payload):
     """Register commands one by one with advanced rate limit handling and exponential backoff
     
+    This improved version uses our command_fix utilities to ensure each command has the correct
+    attribute formatting before registration.
+    
     Returns:
         bool: True if at least half of the commands were registered successfully, False otherwise
     """
+    # Preemptively fix command attributes with our utility
+    try:
+        from utils.command_fix import INTEGRATION_TYPE_GUILD, COMMAND_CONTEXT_GUILD
+        logger.info("Using improved command registration with proper enum objects")
+    except ImportError:
+        logger.warning("Cannot import command_fix utilities, using raw integer values")
+        # Create simple placeholder objects
+        class PlaceholderEnum:
+            def __init__(self, value):
+                self.value = value
+        INTEGRATION_TYPE_GUILD = PlaceholderEnum(1)
+        COMMAND_CONTEXT_GUILD = PlaceholderEnum(2)
     import random
     from pathlib import Path
     import time
@@ -367,6 +382,24 @@ async def sync_slash_commands():
     """Register all slash commands to Discord with detailed error handling"""
     try:
         logger.info("📝 STARTING COMMAND REGISTRATION")
+        
+        # First, fix any issues with command objects using our command_fix utilities
+        try:
+            from utils.command_fix import patch_discord_internals, apply_command_fixes
+            
+            # Apply the monkey patch to Discord internals
+            if patch_discord_internals():
+                logger.info("✅ Successfully patched Discord.py internals for improved command handling")
+            else:
+                logger.warning("⚠️ Could not patch Discord.py internals, will rely on command-by-command fixes")
+            
+            # Apply fixes to all command groups in all cogs
+            fixed_count = apply_command_fixes(bot)
+            logger.info(f"🔧 Applied fixes to {fixed_count} command objects")
+        except Exception as e:
+            logger.error(f"❌ Error applying command fixes: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
         
         # Check if we can use the enhanced sync_retry module
         try:
@@ -1043,6 +1076,24 @@ async def load_cogs():
     
     if loaded_count > 0:
         logger.info(f"Successfully loaded {loaded_count}/{len(cog_classes)} cogs")
+        
+        # Apply command fixes to fix null attributes and patch Discord internals if needed
+        try:
+            from utils.command_fix import apply_command_fixes, patch_discord_internals
+            
+            # First try to patch Discord internals for a more reliable fix
+            if patch_discord_internals():
+                logger.info("Successfully patched Discord internals for better command handling")
+            else:
+                logger.info("Could not patch Discord internals, will rely on command-by-command fixes")
+            
+            # Apply fixes to all command groups
+            fixed_count = apply_command_fixes(bot)
+            logger.info(f"Applied command fixes to {fixed_count} command groups")
+        except Exception as e:
+            logger.error(f"Error applying command fixes: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     else:
         logger.error("No cogs were loaded successfully")
 

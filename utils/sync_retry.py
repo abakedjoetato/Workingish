@@ -105,10 +105,9 @@ class CommandSyncManager:
                             # For regular commands, convert to dict
                             # Attempt to fix command attributes first if needed
                             try:
-                                if hasattr(cmd, 'integration_types') and (cmd.integration_types is None or len(cmd.integration_types) == 0):
-                                    cmd.integration_types = [1]  # 1 = GUILD_INSTALL
-                                if hasattr(cmd, 'contexts') and (cmd.contexts is None or len(cmd.contexts) == 0):
-                                    cmd.contexts = [2]  # 2 = GUILD
+                                # Use proper command fix function to ensure we have the right types
+                                from utils.command_fix import fix_command_group_attributes
+                                cmd = fix_command_group_attributes(cmd)
                                     
                                 cmd_payload = cmd.to_dict()
                                 commands_payload.append(cmd_payload)
