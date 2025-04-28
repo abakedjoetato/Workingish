@@ -246,64 +246,28 @@ def register_commands():
                             "required": True
                         },
                         {
-                            "name": "game_port",
-                            "description": "Game server port (default: 27015)",
+                            "name": "port",
+                            "description": "Game server port",
                             "type": 4,  # INTEGER
                             "required": True
                         },
                         {
-                            "name": "query_port",
-                            "description": "Query port (default: same as game_port)",
-                            "type": 4,  # INTEGER
-                            "required": False
-                        },
-                        {
-                            "name": "rcon_port",
-                            "description": "RCON port (default: none)",
-                            "type": 4,  # INTEGER
-                            "required": False
-                        },
-                        {
-                            "name": "rcon_password",
-                            "description": "RCON password (optional)",
+                            "name": "server_id",
+                            "description": "Server ID (used in log directory structure)",
                             "type": 3,  # STRING
-                            "required": False
+                            "required": True
                         },
                         {
-                            "name": "ftp_host",
-                            "description": "FTP host for log access (optional)",
+                            "name": "username",
+                            "description": "Login username (SFTP/SSH)",
                             "type": 3,  # STRING
-                            "required": False
+                            "required": True
                         },
                         {
-                            "name": "ftp_port",
-                            "description": "FTP port (default: 21)",
-                            "type": 4,  # INTEGER
-                            "required": False
-                        },
-                        {
-                            "name": "ftp_user",
-                            "description": "FTP username (optional)",
+                            "name": "password",
+                            "description": "Login password (SFTP/SSH)",
                             "type": 3,  # STRING
-                            "required": False
-                        },
-                        {
-                            "name": "ftp_password",
-                            "description": "FTP password (optional)",
-                            "type": 3,  # STRING
-                            "required": False
-                        },
-                        {
-                            "name": "csv_path",
-                            "description": "Path to CSV files on FTP server (optional)",
-                            "type": 3,  # STRING
-                            "required": False
-                        },
-                        {
-                            "name": "log_path",
-                            "description": "Path to log files on FTP server (optional)",
-                            "type": 3,  # STRING
-                            "required": False
+                            "required": True
                         }
                     ]
                 },
@@ -317,48 +281,52 @@ def register_commands():
                             "description": "Server name to remove",
                             "type": 3,  # STRING
                             "required": True
+                        }
+                    ]
+                },
+                {
+                    "name": "update",
+                    "description": "Update server settings",
+                    "type": 1,  # Subcommand
+                    "options": [
+                        {
+                            "name": "name",
+                            "description": "Name of the server to update",
+                            "type": 3,  # STRING
+                            "required": True
                         },
                         {
-                            "name": "confirm",
-                            "description": "Type the server name again to confirm deletion",
+                            "name": "setting",
+                            "description": "Setting to update",
+                            "type": 3,  # STRING
+                            "required": True,
+                            "choices": [
+                                {"name": "Name", "value": "name"},
+                                {"name": "Host/IP", "value": "ip"},
+                                {"name": "Port", "value": "port"},
+                                {"name": "Server ID", "value": "server_id"},
+                                {"name": "Username", "value": "username"},
+                                {"name": "Password", "value": "password"},
+                                {"name": "CSV Parsing", "value": "csv_enabled"},
+                                {"name": "Log Parsing", "value": "log_enabled"}
+                            ]
+                        },
+                        {
+                            "name": "value",
+                            "description": "New value for the setting",
                             "type": 3,  # STRING
                             "required": True
                         }
                     ]
                 },
                 {
-                    "name": "edit",
-                    "description": "Edit server connection settings",
+                    "name": "reset",
+                    "description": "Reset parsers for a server",
                     "type": 1,  # Subcommand
                     "options": [
                         {
                             "name": "name",
-                            "description": "Server name to edit",
-                            "type": 3,  # STRING
-                            "required": True
-                        },
-                        {
-                            "name": "setting",
-                            "description": "Setting to change",
-                            "type": 3,  # STRING
-                            "required": True,
-                            "choices": [
-                                {"name": "Host Address", "value": "host"},
-                                {"name": "Game Port", "value": "game_port"},
-                                {"name": "Query Port", "value": "query_port"},
-                                {"name": "RCON Port", "value": "rcon_port"},
-                                {"name": "RCON Password", "value": "rcon_password"},
-                                {"name": "FTP Host", "value": "ftp_host"},
-                                {"name": "FTP Port", "value": "ftp_port"},
-                                {"name": "FTP Username", "value": "ftp_user"},
-                                {"name": "FTP Password", "value": "ftp_password"},
-                                {"name": "CSV Path", "value": "csv_path"},
-                                {"name": "Log Path", "value": "log_path"}
-                            ]
-                        },
-                        {
-                            "name": "value",
-                            "description": "New value for the setting",
+                            "description": "Name of the server to reset parsers for",
                             "type": 3,  # STRING
                             "required": True
                         }
@@ -436,6 +404,127 @@ def register_commands():
                             "required": False,
                             "min_value": 1,
                             "max_value": 20
+                        }
+                    ]
+                }
+            ]
+        },
+        
+        # Missions command group with subcommands
+        {
+            "name": "missions",
+            "description": "Configure and view mission notifications",
+            "type": 1,  # CHAT_INPUT
+            "options": [
+                {
+                    "name": "channel",
+                    "description": "Set the channel for mission notifications",
+                    "type": 1,  # Subcommand
+                    "options": [
+                        {
+                            "name": "channel",
+                            "description": "Channel to send notifications to",
+                            "type": 7,  # CHANNEL
+                            "required": False
+                        }
+                    ]
+                },
+                {
+                    "name": "disable",
+                    "description": "Disable mission notifications for this guild",
+                    "type": 1  # Subcommand
+                },
+                {
+                    "name": "list",
+                    "description": "List recent server events",
+                    "type": 1,  # Subcommand
+                    "options": [
+                        {
+                            "name": "server_name",
+                            "description": "Server name to show events for",
+                            "type": 3,  # STRING
+                            "required": False
+                        },
+                        {
+                            "name": "event_type",
+                            "description": "Type of event to filter",
+                            "type": 3,  # STRING
+                            "required": False,
+                            "choices": [
+                                {"name": "Mission", "value": "mission"},
+                                {"name": "Heli Crash", "value": "helicrash"},
+                                {"name": "Airdrop", "value": "airdrop"},
+                                {"name": "Trader", "value": "trader"},
+                                {"name": "Server Start", "value": "server_start"},
+                                {"name": "Server Stop", "value": "server_stop"}
+                            ]
+                        },
+                        {
+                            "name": "limit",
+                            "description": "Number of events to show (max: 20)",
+                            "type": 4,  # INTEGER
+                            "required": False,
+                            "min_value": 1,
+                            "max_value": 20
+                        }
+                    ]
+                }
+            ]
+        },
+        
+        # Faction command group with subcommands
+        {
+            "name": "faction",
+            "description": "Manage player factions and groups",
+            "type": 1,  # CHAT_INPUT
+            "options": [
+                {
+                    "name": "create",
+                    "description": "Create a new faction",
+                    "type": 1,  # Subcommand
+                    "options": [
+                        {
+                            "name": "name",
+                            "description": "Name of the faction to create",
+                            "type": 3,  # STRING
+                            "required": True
+                        },
+                        {
+                            "name": "tag",
+                            "description": "Tag/prefix for faction members (max 5 chars)",
+                            "type": 3,  # STRING
+                            "required": True
+                        }
+                    ]
+                },
+                {
+                    "name": "info",
+                    "description": "View faction information",
+                    "type": 1,  # Subcommand
+                    "options": [
+                        {
+                            "name": "name",
+                            "description": "Name of the faction to view",
+                            "type": 3,  # STRING
+                            "required": False
+                        }
+                    ]
+                },
+                {
+                    "name": "list",
+                    "description": "List all factions in this guild",
+                    "type": 1  # Subcommand
+                },
+                {
+                    "name": "stats",
+                    "description": "View combined statistics for all members of a faction",
+                    "type": 1,  # Subcommand
+                    "options": [
+                        {
+                            "name": "name",
+                            "description": "Name of the faction to view stats for",
+                            "type": 3,  # STRING
+                            "required": False
                         }
                     ]
                 }

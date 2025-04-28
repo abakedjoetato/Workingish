@@ -111,6 +111,20 @@ def register_commands():
                     "type": 1  # Subcommand
                 }
             ]
+        },
+        
+        # Missions command group (minimal options)
+        {
+            "name": "missions",
+            "description": "View server missions and events",
+            "type": 1,  # CHAT_INPUT
+            "options": [
+                {
+                    "name": "list",
+                    "description": "List recent server events",
+                    "type": 1  # Subcommand
+                }
+            ]
         }
     ]
     

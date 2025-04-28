@@ -394,5 +394,5 @@ class MissionCommands(commands.Cog):
 def setup(bot):
     """Add the cog to the bot directly when loaded via extension"""
     bot.add_cog(MissionCommands(bot))
-    bot.application_command(mission_group)
-    logger.info("Loaded MissionCommands cog and registered mission command group")
+    bot.add_application_command(mission_group)
+    logger.info("Loaded MissionCommands cog and registered missions command group")
