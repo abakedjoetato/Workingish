@@ -544,19 +544,23 @@ class AdminCommands(commands.Cog):
             for category, features in feature_categories.items():
                 # Build feature table for this category
                 table = "```\n"
-                table += f"{'Feature':<20} | {'Free':<8} | {'Premium':<8} | {'Enterprise':<10}\n"
-                table += f"{'-' * 20} | {'-' * 8} | {'-' * 8} | {'-' * 10}\n"
+                table += f"{'Feature':<20} | {'Survivor':<10} | {'Warlord':<10} | {'Overseer':<10}\n"
+                table += f"{'-' * 20} | {'-' * 10} | {'-' * 10} | {'-' * 10}\n"
                 
                 for feature in features:
                     feature_name = feature.replace('_', ' ').title()
                     feature_name = feature_name[:18] + ".." if len(feature_name) > 18 else feature_name
                     
-                    # Get values for each tier
-                    free_val = self._format_feature_value(tiers["free"].get(feature, "N/A"))
-                    premium_val = self._format_feature_value(tiers["premium"].get(feature, "N/A"))
-                    enterprise_val = self._format_feature_value(tiers["enterprise"].get(feature, "N/A"))
+                    # Get values for each tier (with fallback to old tier names for compatibility)
+                    survivor_key = "survivor" if "survivor" in tiers else "free"
+                    warlord_key = "warlord" if "warlord" in tiers else "premium"
+                    overseer_key = "overseer" if "overseer" in tiers else "enterprise"
                     
-                    table += f"{feature_name:<20} | {free_val:<8} | {premium_val:<8} | {enterprise_val:<10}\n"
+                    survivor_val = self._format_feature_value(tiers[survivor_key].get(feature, "N/A"))
+                    warlord_val = self._format_feature_value(tiers[warlord_key].get(feature, "N/A"))
+                    overseer_val = self._format_feature_value(tiers[overseer_key].get(feature, "N/A"))
+                    
+                    table += f"{feature_name:<20} | {survivor_val:<10} | {warlord_val:<10} | {overseer_val:<10}\n"
                 
                 table += "```"
                 
