@@ -23,11 +23,11 @@ PREMIUM_TIERS = {
         "advanced_stats": False,
         "faction_system": False,
         "rivalry_tracking": False,
-        "connection_tracking": True,
+        "connection_tracking": False,  # Changed to premium
         "killfeed": True,
-        "basic_stats": True,
+        "basic_stats": False,  # Changed to premium
         "player_linking": True,
-        "mission_tracking": True,
+        "mission_tracking": False,  # Changed to premium
         "leaderboard": True,
         "csv_parsing": True,
         "log_parsing": True
