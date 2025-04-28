@@ -46,9 +46,29 @@ async def sync_slash_commands():
     """Sync slash commands to Discord - call this after all cogs are loaded"""
     try:
         logger.info("Syncing slash commands...")
+        
+        # Get the home guild ID if available for faster testing
+        home_guild_id = None
+        if bot.db:
+            try:
+                home_guild_id = await bot.db.get_home_guild_id()
+            except:
+                pass
+                
+        if home_guild_id:
+            # Sync to home guild first for faster testing (less rate limiting)
+            try:
+                logger.info(f"Syncing commands to home guild {home_guild_id} first...")
+                await bot.sync_commands(guild_ids=[home_guild_id])
+                logger.info(f"Commands synced to home guild successfully")
+            except Exception as e:
+                logger.error(f"Error syncing commands to home guild: {e}")
+        
         # This syncs slash commands globally, making them available in all guilds
+        # This may take up to an hour to propagate due to Discord's caching
+        logger.info("Syncing commands globally (this may be rate-limited by Discord)...")
         await bot.sync_commands()
-        logger.info("Slash commands synced successfully")
+        logger.info("Global slash commands sync request sent successfully")
     except Exception as e:
         logger.error(f"Error syncing slash commands: {e}")
 
@@ -59,37 +79,79 @@ async def ping(ctx):
     latency = round(bot.latency * 1000)
     await ctx.respond(f"Pong! 🏓 Response time: {latency}ms")
 
-@bot.slash_command(name="help", description="Shows available commands")
+@bot.slash_command(name="help", description="Shows commands with interactive menu")
 async def help_command(ctx):
-    """Shows available commands and help information"""
+    """Shows available commands and help information with pagination"""
+    # Import the command helper utilities
+    from utils.command_helper import get_all_commands, CommandsView, COLORS
+    
+    # Gather all commands from the bot and organize them by category
+    command_data = await get_all_commands(bot)
+    
+    # Create the initial embed
     embed = discord.Embed(
-        title="Bot Commands",
-        description="This bot uses slash commands. Type `/` to see all available commands.",
-        color=0x5865F2
+        title="💎 DEADSIDE COMMAND CENTER",
+        description="Interactive command guide with detailed information.",
+        color=COLORS["default"]  # Use emerald green from our theme
     )
     
-    embed.add_field(
-        name="Main Command Groups",
-        value="- `/server` - Server management commands\n"
-              "- `/stats` - Statistics commands\n"
-              "- `/faction` - Faction management commands\n"
-              "- `/killfeed` - Killfeed notification commands\n"
-              "- `/connections` - Connection notification commands\n"
-              "- `/missions` - Mission notification commands\n"
-              "- `/admin` - Administrative commands",
-        inline=False
+    # If we successfully gathered command data
+    if command_data:
+        # Get the first category's information to show initially
+        first_category = list(command_data.keys())[0]
+        category_commands = command_data[first_category]
+        
+        # Add the first 5 commands (or fewer if there aren't that many)
+        cmd_count = min(5, len(category_commands))
+        for i in range(cmd_count):
+            cmd = category_commands[i]
+            name = cmd.get("name", "Unknown Command")
+            description = cmd.get("description", "No description available")
+            usage = cmd.get("usage", "")
+            examples = cmd.get("examples", [])
+            required_permissions = cmd.get("required_permissions", [])
+            premium_tier = cmd.get("premium_tier", None)
+            
+            # Format the value with usage, examples, and requirements
+            value = f"{description}\n\n"
+            
+            if usage:
+                value += f"**Usage:** `{usage}`\n"
+            
+            if examples:
+                examples_text = "\n".join([f"• `{ex}`" for ex in examples[:2]])
+                value += f"**Examples:**\n{examples_text}\n"
+            
+            if required_permissions:
+                perms = ", ".join(required_permissions)
+                value += f"**Required Permissions:** {perms}\n"
+            
+            if premium_tier:
+                value += f"**Premium Tier:** {premium_tier.capitalize()}\n"
+            
+            embed.add_field(
+                name=name,
+                value=value,
+                inline=False
+            )
+    else:
+        # Fallback if command gathering fails
+        embed.add_field(
+            name="Commands Not Available",
+            value="Command information could not be loaded. Please try again later.",
+            inline=False
+        )
+    
+    # Set footer with usage instructions
+    embed.set_footer(
+        text="Use the dropdown to switch categories and buttons to navigate pages"
     )
     
-    embed.add_field(
-        name="Utility Commands",
-        value="- `/ping` - Check bot response time\n"
-              "- `/help` - Show this help message",
-        inline=False
-    )
+    # Create the view with interactive components
+    view = CommandsView(command_data, ctx.author.id)
     
-    embed.set_footer(text="For more information, check the README.md file")
-    
-    await ctx.respond(embed=embed)
+    # Send the embed with the view
+    await ctx.respond(embed=embed, view=view)
 
 # Store database instance at bot level
 bot.db = None
