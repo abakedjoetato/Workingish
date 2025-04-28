@@ -15,7 +15,7 @@ PARSER_INTERVAL = int(os.getenv("PARSER_INTERVAL", "300"))  # 5 minutes in secon
 
 # Default premium tiers
 PREMIUM_TIERS = {
-    "survivor": {  # Renamed from "free"
+    "survivor": {  # Basic tier (free)
         "max_servers": 1,
         "historical_parsing": False,
         "max_history_days": 0,
@@ -32,7 +32,7 @@ PREMIUM_TIERS = {
         "csv_parsing": True,
         "log_parsing": True
     },
-    "warlord": {  # Renamed from "premium"
+    "warlord": {  # Premium tier
         "max_servers": 3,
         "historical_parsing": True,
         "max_history_days": 7,
@@ -49,7 +49,7 @@ PREMIUM_TIERS = {
         "csv_parsing": True,
         "log_parsing": True
     },
-    "overseer": {  # Renamed from "enterprise"
+    "overseer": {  # Enterprise tier
         "max_servers": 10,
         "historical_parsing": True,
         "max_history_days": 30,
@@ -74,12 +74,14 @@ SSH_TIMEOUT = 10
 
 # Default embed colors
 COLORS = {
-    "primary": 0x5865F2,     # Discord Blurple
+    "primary": 0x50C878,     # Emerald green (new theme color)
     "success": 0x57F287,     # Green
     "danger": 0xED4245,      # Red
     "warning": 0xFEE75C,     # Yellow
     "info": 0x5865F2,        # Light Blue
-    "neutral": 0x99AAB5      # Gray
+    "neutral": 0x99AAB5,     # Gray
+    "emerald": 0x50C878,     # Emerald green (explicit theme color)
+    "default": 0x50C878      # Default color for emerald theme
 }
 
 # Default messages

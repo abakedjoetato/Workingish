@@ -45,32 +45,85 @@ bot = commands.Bot(
 async def sync_slash_commands():
     """Sync slash commands to Discord - call this after all cogs are loaded"""
     try:
-        logger.info("Syncing slash commands...")
+        logger.info("Preparing to sync slash commands globally...")
         
-        # Get the home guild ID if available for faster testing
-        home_guild_id = None
-        if bot.db:
-            try:
-                home_guild_id = await bot.db.get_home_guild_id()
-            except:
-                pass
+        # Make sure we have all command groups registered before syncing
+        stats_group = next((cmd for cmd in bot.application_commands if cmd.name == "stats"), None)
+        
+        if not stats_group:
+            logger.warning("Stats command group not found - will attempt to register it")
+            # Import stats group from stats commands
+            from cogs.stats_commands import stats_group
+            # Register it directly
+            bot.add_application_command(stats_group)
+            logger.info("Manually registered stats command group")
+            
+        # Check what command groups we have before sync
+        command_groups = [cmd.name for cmd in bot.application_commands if hasattr(cmd, 'subcommands')]
+        logger.info(f"Command groups before sync: {', '.join(command_groups)}")
+        
+        # For all command groups, ensure subcommands are registered
+        for cmd in bot.application_commands:
+            if hasattr(cmd, 'subcommands'):
+                subcmd_names = [subcmd.name for subcmd in cmd.subcommands]
+                logger.info(f"Subcommands for {cmd.name}: {', '.join(subcmd_names)}")
                 
-        if home_guild_id:
-            # Sync to home guild first for faster testing (less rate limiting)
-            try:
-                logger.info(f"Syncing commands to home guild {home_guild_id} first...")
-                await bot.sync_commands(guild_ids=[home_guild_id])
-                logger.info(f"Commands synced to home guild successfully")
-            except Exception as e:
-                logger.error(f"Error syncing commands to home guild: {e}")
+                # Special handling for stats command group
+                if cmd.name == "stats" and "link" not in subcmd_names:
+                    logger.warning("Stats link command not found in stats group")
         
-        # This syncs slash commands globally, making them available in all guilds
-        # This may take up to an hour to propagate due to Discord's caching
-        logger.info("Syncing commands globally (this may be rate-limited by Discord)...")
-        await bot.sync_commands()
-        logger.info("Global slash commands sync request sent successfully")
+        # Log what we're doing
+        logger.info("STARTING GLOBAL COMMAND SYNC")
+        logger.info("This will make commands available in all servers where the bot is invited")
+        logger.info("Note: Discord has a 200 requests per day global limit, so this operation is rate-limited")
+        
+        # Global sync with robust rate limit handling and maximum retries
+        max_retries = 3
+        retry_count = 0
+        backoff_time = 10  # Start with a reasonable backoff
+        
+        while retry_count < max_retries:
+            try:
+                # Perform the actual global sync
+                await bot.sync_commands()
+                logger.info("✅ Global command sync successful!")
+                logger.info("Commands will be available in all servers where the bot is invited")
+                logger.info("Note: Changes may take up to an hour to propagate to all servers")
+                return
+            except discord.errors.HTTPException as e:
+                if hasattr(e, 'status') and e.status == 429:
+                    retry_count += 1
+                    # Get retry after time from the response if available
+                    retry_after = getattr(e, 'retry_after', backoff_time)
+                    
+                    # Don't wait more than 5 minutes total
+                    if retry_after > 300:
+                        retry_after = 300
+                        
+                    logger.warning(f"Rate limited on global sync - retry {retry_count}/{max_retries} in {retry_after}s")
+                    await asyncio.sleep(retry_after)
+                    backoff_time *= 2  # Exponential backoff
+                else:
+                    # Other HTTP error - log and continue without blocking
+                    logger.error(f"HTTP error during global sync: {str(e)}")
+                    # Don't block startup because of command sync errors
+                    break
+            except Exception as e:
+                logger.error(f"Unexpected error during global sync: {str(e)}")
+                # Continue without blocking startup
+                break
+        
+        # If we got here, we couldn't sync commands due to rate limits
+        if retry_count >= max_retries:
+            logger.warning("Failed to sync commands globally after multiple retries - rate limits in effect")
+            logger.warning("The bot will continue to function with existing commands")
+            logger.warning("Commands will sync automatically when rate limits reset (usually within 24 hours)")
+            
+        # Continue without blocking startup - Discord will eventually sync the commands
+        logger.info("Note: Discord's rate limits on global command registration restrict frequent updates")
+        logger.info("Command changes may take up to 24 hours to propagate to all Discord servers")
     except Exception as e:
-        logger.error(f"Error syncing slash commands: {e}")
+        logger.error(f"Error in sync_slash_commands function: {e}")
 
 # Add slash commands for utility functions
 @bot.slash_command(name="ping", description="Check bot's response time")
@@ -202,29 +255,73 @@ async def on_ready():
     # Load cogs after database is established
     await load_cogs()
     
-    # Manually add command groups
+    # Manually add command groups with rate limit handling
     try:
-        # Add server command group
-        bot.add_application_command(server_group)
-        logger.info(f"Successfully registered server command group")
+        # Import all command groups to make sure they're available
+        from cogs.server_commands_slash import server_group 
+        from cogs.connection_commands import connection_group
+        from cogs.killfeed_commands import killfeed_group
+        from cogs.mission_commands import mission_group
+        from cogs.faction_commands import faction_group
+        from cogs.stats_commands import stats_group
         
-        # Add connection command group
-        bot.add_application_command(connection_group)
-        logger.info(f"Successfully registered connections command group")
+        # Define all command groups to register
+        command_groups = [
+            (server_group, "server"),
+            (connection_group, "connections"),
+            (killfeed_group, "killfeed"),
+            (mission_group, "mission"),
+            (faction_group, "faction"),
+            (stats_group, "stats")
+        ]
         
-        # Add killfeed command group
-        bot.add_application_command(killfeed_group)
-        logger.info(f"Successfully registered killfeed command group")
+        # Register each command group with delay to avoid rate limits
+        for group, name in command_groups:
+            try:
+                # Add a small delay between registrations to avoid rate limits
+                await asyncio.sleep(0.5)
+                
+                # Attempt to register the command group if not already registered
+                existing = next((cmd for cmd in bot.application_commands if cmd.name == name), None)
+                if not existing:
+                    bot.add_application_command(group)
+                    logger.info(f"Successfully registered {name} command group")
+                else:
+                    logger.info(f"Command group {name} already registered")
+                
+            except discord.errors.HTTPException as e:
+                if hasattr(e, 'status') and e.status == 429:
+                    # If rate limited, log and wait before continuing
+                    retry_after = getattr(e, 'retry_after', 5)
+                    logger.warning(f"Rate limited when adding {name} group. Waiting {retry_after}s")
+                    await asyncio.sleep(retry_after)
+                    
+                    # Try one more time after waiting
+                    try:
+                        existing = next((cmd for cmd in bot.application_commands if cmd.name == name), None)
+                        if not existing:
+                            bot.add_application_command(group)
+                            logger.info(f"Successfully registered {name} command group after waiting")
+                    except Exception as inner_e:
+                        logger.error(f"Failed to register {name} command group after waiting: {inner_e}")
+                else:
+                    # Other HTTP error
+                    logger.error(f"HTTP error registering {name} command group: {e}")
+            except Exception as e:
+                logger.error(f"Error registering {name} command group: {e}")
+                
+        logger.info("Finished registering all command groups")
         
-        # Add mission command group
-        bot.add_application_command(mission_group)
-        logger.info(f"Successfully registered mission command group")
-        
-        # Add faction command group
-        bot.add_application_command(faction_group)
-        logger.info(f"Successfully registered faction command group")
+        # Double-check that stats_group is registered since it contains our new commands
+        if not next((cmd for cmd in bot.application_commands if cmd.name == "stats"), None):
+            logger.warning("Stats group not registered - making one final attempt")
+            try:
+                bot.add_application_command(stats_group)
+                logger.info("Successfully added stats command group in final check")
+            except Exception as e:
+                logger.error(f"Final attempt to add stats group failed: {e}")
     except Exception as e:
-        logger.error(f"Failed to register command groups: {e}")
+        logger.error(f"Failed in command group registration process: {e}")
     
     # Sync slash commands with Discord - MUST happen after cogs are loaded
     await sync_slash_commands()

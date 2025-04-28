@@ -80,7 +80,7 @@ class StatsCommands(commands.Cog):
             players = await Player.get_by_discord_id(db, str(ctx.author.id))
             
             if not players:
-                await ctx.send("⚠️ Your Discord account is not linked to any players. Use `!link player <player_name>` to link your account.")
+                await ctx.respond("⚠️ Your Discord account is not linked to any players. Use `/stats link <player_name>` to link your account.")
                 return
             
             # Process each linked player
@@ -90,11 +90,124 @@ class StatsCommands(commands.Cog):
                 
                 # Create and send embed
                 embed = await create_player_stats_embed(player, player_stats)
-                await ctx.send(embed=embed)
+                await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error getting self stats: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
+            
+    @stats_group.command(name="link", description="Link your Discord account to a game character")
+    async def link_player(self, ctx, 
+                         player_name: discord.Option(str, "Name of your character in-game", required=True)):
+        """
+        Link your Discord account to a game character
+        
+        Usage: /stats link <player_name>
+        
+        This allows you to use /stats me to quickly view your own statistics.
+        You can link multiple characters if you have alts.
+        """
+        try:
+            db = await Database.get_instance()
+            
+            # Find player by name (case-insensitive)
+            collection = await db.get_collection("players")
+            cursor = collection.find({
+                "player_name": {"$regex": f"^{player_name}$", "$options": "i"}
+            })
+            players = await cursor.to_list(None)
+            
+            if not players:
+                await ctx.respond(f"⚠️ Player '{player_name}' not found. The name must match exactly how it appears in-game.")
+                return
+            
+            # Check if player is already linked to someone else
+            player = Player(**{**players[0], "_id": players[0]["_id"]})
+            if player.discord_id and player.discord_id != str(ctx.author.id):
+                await ctx.respond(f"⚠️ Character '{player.player_name}' is already linked to another Discord user. Please contact an admin if you believe this is an error.")
+                return
+                
+            # Update player with Discord ID
+            player.discord_id = str(ctx.author.id)
+            await player.update(db)
+            
+            # Create confirmation embed with emerald theme
+            embed = discord.Embed(
+                title="Character Linked Successfully",
+                description=f"Your Discord account has been linked to **{player.player_name}**",
+                color=0x50C878  # Emerald green
+            )
+            embed.add_field(
+                name="Stats Overview",
+                value=f"Kills: **{player.total_kills}**\nDeaths: **{player.total_deaths}**"
+            )
+            embed.add_field(
+                name="Quick Access",
+                value="Use `/stats me` to quickly view your statistics"
+            )
+            embed.set_footer(text="You can link multiple characters if you play with alts")
+            
+            await ctx.respond(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error linking player: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
+            
+    @stats_group.command(name="unlink", description="Unlink a character from your Discord account")
+    async def unlink_player(self, ctx,
+                           player_name: discord.Option(str, "Name of character to unlink (leave empty to show all linked characters)", required=False) = None):
+        """
+        Unlink a character from your Discord account
+        
+        Usage: /stats unlink [player_name]
+        
+        If no player name is provided, shows all your linked characters
+        """
+        try:
+            db = await Database.get_instance()
+            
+            # Get all linked players first
+            players = await Player.get_by_discord_id(db, str(ctx.author.id))
+            
+            if not players:
+                await ctx.respond("❓ You don't have any linked characters.")
+                return
+                
+            if player_name:
+                # Find the specific player to unlink
+                player_to_unlink = next((p for p in players if p.player_name.lower() == player_name.lower()), None)
+                
+                if not player_to_unlink:
+                    await ctx.respond(f"⚠️ You don't have a character named '{player_name}' linked to your account.")
+                    return
+                
+                # Update player to remove Discord ID
+                player_to_unlink.discord_id = None
+                await player_to_unlink.update(db)
+                
+                await ctx.respond(f"✅ Successfully unlinked character '{player_to_unlink.player_name}' from your Discord account.")
+            else:
+                # Show all linked characters
+                embed = discord.Embed(
+                    title="Your Linked Characters",
+                    description=f"You have {len(players)} linked character(s)",
+                    color=0x50C878  # Emerald green
+                )
+                
+                for player in players:
+                    embed.add_field(
+                        name=player.player_name,
+                        value=f"Kills: {player.total_kills}\nDeaths: {player.total_deaths}\n" +
+                              f"Unlink: `/stats unlink {player.player_name}`",
+                        inline=True
+                    )
+                
+                embed.set_footer(text="Use /stats unlink <name> to unlink a specific character")
+                await ctx.respond(embed=embed)
+                
+        except Exception as e:
+            logger.error(f"Error unlinking player: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @stats_group.command(name="server", description="View statistics for a server")
     async def server_stats(self, ctx, 

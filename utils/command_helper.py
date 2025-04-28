@@ -35,7 +35,7 @@ CATEGORIES = {
         "name": "CONNECTIONS",
         "description": "Player connection tracking and notifications"
     },
-    "missions": {
+    "mission": {
         "emoji": "🎯",
         "name": "MISSIONS",
         "description": "Mission alert commands and tracking"
@@ -279,71 +279,295 @@ async def get_all_commands(bot) -> Dict[str, List[Dict[str, Any]]]:
     """
     result = {}
     
-    # Handle main application commands (top-level commands and groups)
+    # Make sure all categories are represented even if empty
+    for category in CATEGORIES:
+        result[category] = []
+    
+    # Add manually defined category commands for demonstration
+    # while waiting for Discord to register the actual commands
+    
+    # SERVER COMMANDS
+    result["server"].extend([
+        {
+            "name": "/server add",
+            "description": "Add a new game server to track",
+            "usage": "/server add <name> <host> <port> [username] [password]",
+            "examples": ["/server add \"My Server\" 192.168.1.100 22 admin"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        },
+        {
+            "name": "/server list",
+            "description": "List all configured game servers",
+            "usage": "/server list",
+            "examples": ["/server list"],
+            "required_permissions": [],
+            "premium_tier": None
+        },
+        {
+            "name": "/server status",
+            "description": "Check the status of game servers",
+            "usage": "/server status [name]",
+            "examples": ["/server status", "/server status \"My Server\""],
+            "required_permissions": [],
+            "premium_tier": None
+        },
+        {
+            "name": "/server remove",
+            "description": "Remove a game server from tracking",
+            "usage": "/server remove <name>",
+            "examples": ["/server remove \"My Server\""],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        }
+    ])
+    
+    # STATS COMMANDS
+    result["stats"].extend([
+        {
+            "name": "/stats player",
+            "description": "View detailed player statistics",
+            "usage": "/stats player <name>",
+            "examples": ["/stats player JohnDoe"],
+            "required_permissions": [],
+            "premium_tier": None
+        },
+        {
+            "name": "/stats leaderboard",
+            "description": "View the server kill leaderboard",
+            "usage": "/stats leaderboard [stat_type] [limit]",
+            "examples": ["/stats leaderboard kills 10"],
+            "required_permissions": [],
+            "premium_tier": None
+        },
+        {
+            "name": "/stats me",
+            "description": "View your own player statistics",
+            "usage": "/stats me",
+            "examples": ["/stats me"],
+            "required_permissions": [],
+            "premium_tier": None
+        },
+        {
+            "name": "/stats link",
+            "description": "Link your Discord account to a game character",
+            "usage": "/stats link <player_name>",
+            "examples": ["/stats link JohnDoe"],
+            "required_permissions": [],
+            "premium_tier": None
+        },
+        {
+            "name": "/stats unlink",
+            "description": "Unlink a character from your Discord account",
+            "usage": "/stats unlink [player_name]",
+            "examples": ["/stats unlink", "/stats unlink JohnDoe"],
+            "required_permissions": [],
+            "premium_tier": None
+        },
+        {
+            "name": "/stats weapon",
+            "description": "View statistics for a specific weapon",
+            "usage": "/stats weapon <name>",
+            "examples": ["/stats weapon M4A1"],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        }
+    ])
+    
+    # KILLFEED COMMANDS
+    result["killfeed"].extend([
+        {
+            "name": "/killfeed channel",
+            "description": "Set channel for killfeed notifications",
+            "usage": "/killfeed channel [#channel]",
+            "examples": ["/killfeed channel #killfeed"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        },
+        {
+            "name": "/killfeed disable",
+            "description": "Disable killfeed notifications",
+            "usage": "/killfeed disable",
+            "examples": ["/killfeed disable"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        }
+    ])
+    
+    # CONNECTION COMMANDS
+    result["connections"].extend([
+        {
+            "name": "/connections channel",
+            "description": "Set channel for connection notifications",
+            "usage": "/connections channel [#channel]",
+            "examples": ["/connections channel #connections"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/connections disable",
+            "description": "Disable connection notifications",
+            "usage": "/connections disable",
+            "examples": ["/connections disable"],
+            "required_permissions": ["Administrator"], 
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/connections list",
+            "description": "List recent player connections",
+            "usage": "/connections list [server_name] [limit]",
+            "examples": ["/connections list \"My Server\" 10"],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        }
+    ])
+    
+    # MISSION COMMANDS
+    result["mission"].extend([
+        {
+            "name": "/mission channel",
+            "description": "Set channel for mission notifications",
+            "usage": "/mission channel [#channel]",
+            "examples": ["/mission channel #missions"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/mission disable",
+            "description": "Disable mission notifications",
+            "usage": "/mission disable",
+            "examples": ["/mission disable"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": "warlord"
+        }
+    ])
+    
+    # FACTION COMMANDS
+    result["faction"].extend([
+        {
+            "name": "/faction create",
+            "description": "Create a new faction",
+            "usage": "/faction create <name> <abbreviation>",
+            "examples": ["/faction create \"Black Watch\" BW"],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/faction info",
+            "description": "View information about a faction",
+            "usage": "/faction info [name]",
+            "examples": ["/faction info", "/faction info \"Black Watch\""],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/faction list",
+            "description": "List all factions in the guild",
+            "usage": "/faction list",
+            "examples": ["/faction list"],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/faction invite",
+            "description": "Invite a member to your faction",
+            "usage": "/faction invite @member",
+            "examples": ["/faction invite @User"],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/faction leave",
+            "description": "Leave your current faction",
+            "usage": "/faction leave",
+            "examples": ["/faction leave"],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        },
+        {
+            "name": "/faction stats",
+            "description": "View combined statistics for all members of a faction",
+            "usage": "/faction stats [name]",
+            "examples": ["/faction stats", "/faction stats \"Black Watch\""],
+            "required_permissions": [],
+            "premium_tier": "warlord"
+        }
+    ])
+    
+    # ADMIN COMMANDS
+    result["admin"].extend([
+        {
+            "name": "/admin premium",
+            "description": "View or set premium tier for a guild",
+            "usage": "/admin premium [guild_id] [tier]",
+            "examples": ["/admin premium", "/admin premium 123456789 warlord"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        },
+        {
+            "name": "/admin features",
+            "description": "Display available features by premium tier",
+            "usage": "/admin features",
+            "examples": ["/admin features"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        },
+        {
+            "name": "/admin link",
+            "description": "Link a Discord member to a game player",
+            "usage": "/admin link @member <player_name>",
+            "examples": ["/admin link @User PlayerName"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        },
+        {
+            "name": "/admin unlink",
+            "description": "Unlink a Discord member from a game player",
+            "usage": "/admin unlink @member [player_name]",
+            "examples": ["/admin unlink @User", "/admin unlink @User PlayerName"],
+            "required_permissions": ["Administrator"],
+            "premium_tier": None
+        }
+    ])
+    
+    # UTILITY COMMANDS
+    # Add any actual utility commands from the bot
     for cmd in bot.application_commands:
         try:
             # Get basic command info
             cmd_name = cmd.name
             cmd_description = cmd.description or "No description available"
             
-            # Determine category based on command name or properties
-            category = get_command_category(cmd)
+            # Standalone commands like ping, commands go to utility
+            category = "utility"
             
-            # Initialize category if it doesn't exist
-            if category not in result:
-                result[category] = []
+            # Skip command groups that we've manually added above
+            if cmd_name in ["server", "connections", "killfeed", "mission", "faction", "admin"]:
+                continue
+                
+            # Get usage and examples
+            usage = get_command_usage(cmd_name, cmd)
+            examples = get_command_examples(cmd_name, cmd)
             
-            # Check if this is a command group with subcommands
-            if hasattr(cmd, 'subcommands') and cmd.subcommands:
-                # For each subcommand in the group
-                for subcmd in cmd.subcommands:
-                    try:
-                        # Format the subcommand name as 'group subcommand'
-                        subcmd_name = f"/{cmd_name} {subcmd.name}"
-                        subcmd_description = subcmd.description or "No description available"
-                        
-                        # Get usage and examples information
-                        usage = get_command_usage(cmd_name, subcmd, is_subcommand=True)
-                        examples = get_command_examples(cmd_name, subcmd, is_subcommand=True)
-                        
-                        # Determine permissions and premium tier requirements
-                        required_permissions = get_required_permissions(subcmd)
-                        premium_tier = get_premium_tier_requirement(subcmd)
-                        
-                        # Add the subcommand to the category
-                        result[category].append({
-                            "name": subcmd_name,
-                            "description": subcmd_description,
-                            "usage": usage,
-                            "examples": examples,
-                            "required_permissions": required_permissions,
-                            "premium_tier": premium_tier
-                        })
-                    except Exception as e:
-                        logger.error(f"Error processing subcommand {cmd_name} {subcmd.name}: {e}")
-                        continue
-            else:
-                # This is a standalone command (not a group)
-                # Get usage and examples
-                usage = get_command_usage(cmd_name, cmd)
-                examples = get_command_examples(cmd_name, cmd)
-                
-                # Determine permissions and premium tier requirements
-                required_permissions = get_required_permissions(cmd)
-                premium_tier = get_premium_tier_requirement(cmd)
-                
-                # Add the command to the category
-                result[category].append({
-                    "name": f"/{cmd_name}",
-                    "description": cmd_description,
-                    "usage": usage,
-                    "examples": examples,
-                    "required_permissions": required_permissions,
-                    "premium_tier": premium_tier
-                })
+            # Determine permissions and premium tier requirements
+            required_permissions = get_required_permissions(cmd)
+            premium_tier = get_premium_tier_requirement(cmd)
+            
+            # Add the command to the utility category
+            result[category].append({
+                "name": f"/{cmd_name}",
+                "description": cmd_description,
+                "usage": usage,
+                "examples": examples,
+                "required_permissions": required_permissions,
+                "premium_tier": premium_tier
+            })
         except Exception as e:
             logger.error(f"Error processing command {cmd.name}: {e}")
             continue
+            
+    # Remove empty categories
+    result = {k: v for k, v in result.items() if v}
     
     # Sort commands within each category alphabetically
     for category in result:
