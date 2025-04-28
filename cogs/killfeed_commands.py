@@ -223,10 +223,15 @@ class KillfeedCommands(commands.Cog):
                     if last_kill_id:
                         new_kills = [
                             kill for kill in all_kills 
-                            if kill.get("id", 0) > last_kill_id or kill.get("_id", 0) > last_kill_id
+                            if (kill.get("id", 0) > last_kill_id or kill.get("_id", 0) > last_kill_id)
+                            and not kill.get("from_batch_process", False)  # Skip kills from batch processing
                         ]
                     else:
-                        new_kills = all_kills
+                        # For first-time initialization, don't show any historical kills
+                        new_kills = [
+                            kill for kill in all_kills
+                            if not kill.get("from_batch_process", False)  # Skip kills from batch processing
+                        ][-5:]  # Only show the 5 most recent kills on first run
                     
                     for kill_data in new_kills:
                         # Create a Kill object

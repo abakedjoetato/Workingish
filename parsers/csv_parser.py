@@ -156,7 +156,8 @@ class CSVParser:
                         server_id=self.server_id,
                         is_suicide=is_suicide,
                         is_menu_suicide=is_menu_suicide,
-                        is_fall_death=is_fall_death
+                        is_fall_death=is_fall_death,
+                        from_batch_process=False  # Regular CSV parser is not batch processing
                     )
                     
                     processed_records.append(kill)

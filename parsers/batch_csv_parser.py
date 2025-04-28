@@ -283,6 +283,19 @@ class BatchCSVParser:
                 
                 # Save state after each file
                 await self.save_state(file_path, 0)
+                
+                # Important: Update the auto parser state to match this file
+                # This prevents the auto parser from reprocessing the same file
+                auto_state = await ParserState.get_or_create(
+                    db,
+                    self.server_id,
+                    "csv",
+                    False  # Auto parser uses is_historical=False
+                )
+                auto_state.last_filename = os.path.basename(file_path)
+                auto_state.last_position = 0  # Start at beginning of next file
+                await auto_state.update(db)
+                logger.info(f"Updated auto parser state for server {self.server_id} to file {file_path}")
             
             # Mark as completed
             memory = await ParserMemory.get_or_create(db, self.server_id, "batch_csv")
@@ -373,7 +386,7 @@ class BatchCSVParser:
                         is_menu_suicide = is_suicide and weapon.lower() == "menu"
                         is_fall_death = is_suicide and weapon.lower() == "fall damage"
                         
-                        # Create and store kill record
+                        # Create and store kill record with batch processing flag to prevent killfeed spam
                         kill = await Kill.create(
                             db,
                             timestamp=timestamp,
@@ -386,7 +399,8 @@ class BatchCSVParser:
                             server_id=self.server_id,
                             is_suicide=is_suicide,
                             is_menu_suicide=is_menu_suicide,
-                            is_fall_death=is_fall_death
+                            is_fall_death=is_fall_death,
+                            from_batch_process=True  # Flag to indicate this kill was from batch processing
                         )
                         
                         # Update player stats
