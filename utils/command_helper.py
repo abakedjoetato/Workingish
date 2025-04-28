@@ -365,7 +365,7 @@ def get_command_category(cmd) -> str:
             return category
     
     # Default to utility for standalone utility commands
-    if cmd_name in ["ping", "help", "commands"]:
+    if cmd_name in ["ping", "commands"]:
         return "utility"
     
     # If we can't determine the category, use the first part of the name
