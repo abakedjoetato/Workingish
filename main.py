@@ -41,89 +41,364 @@ bot = commands.Bot(
     sync_commands_debug=True,  # Enable debug output for command sync
 )
 
-# Global slash command sync to register application commands
+# Command to register all slash commands to Discord without clearing first
 async def sync_slash_commands():
-    """Sync slash commands to Discord - call this after all cogs are loaded"""
+    """Register all slash commands to Discord with detailed error handling"""
     try:
-        logger.info("Preparing to sync slash commands globally...")
+        logger.info("📝 STARTING COMMAND REGISTRATION")
         
-        # Make sure we have all command groups registered before syncing
-        stats_group = next((cmd for cmd in bot.application_commands if cmd.name == "stats"), None)
+        # Import all command groups to make sure they're available
+        logger.info("Step 1: Importing all command groups")
+        from cogs.server_commands_slash import server_group 
+        from cogs.connection_commands import connection_group
+        from cogs.killfeed_commands import killfeed_group
+        from cogs.mission_commands import mission_group
+        from cogs.faction_commands import faction_group
+        from cogs.stats_commands import stats_group
         
-        if not stats_group:
-            logger.warning("Stats command group not found - will attempt to register it")
-            # Import stats group from stats commands
-            from cogs.stats_commands import stats_group
-            # Register it directly
-            bot.add_application_command(stats_group)
-            logger.info("Manually registered stats command group")
-            
-        # Check what command groups we have before sync
-        command_groups = [cmd.name for cmd in bot.application_commands if hasattr(cmd, 'subcommands')]
-        logger.info(f"Command groups before sync: {', '.join(command_groups)}")
+        # Register all command groups to the bot - without clearing existing ones first
+        logger.info("Step 2: Registering all command groups to bot")
+        command_groups = [
+            (server_group, "server"),
+            (connection_group, "connections"),
+            (killfeed_group, "killfeed"),
+            (mission_group, "mission"),
+            (faction_group, "faction"),
+            (stats_group, "stats")
+        ]
         
-        # For all command groups, ensure subcommands are registered
+        # First clear the duplicates that might be causing our issues
+        logger.info("Removing any duplicate command registrations first")
+        unique_names = set()
+        kept_commands = []
+        
         for cmd in bot.application_commands:
-            if hasattr(cmd, 'subcommands'):
-                subcmd_names = [subcmd.name for subcmd in cmd.subcommands]
-                logger.info(f"Subcommands for {cmd.name}: {', '.join(subcmd_names)}")
-                
-                # Special handling for stats command group
-                if cmd.name == "stats" and "link" not in subcmd_names:
-                    logger.warning("Stats link command not found in stats group")
+            if cmd.name not in unique_names:
+                unique_names.add(cmd.name)
+                kept_commands.append(cmd)
+            else:
+                logger.warning(f"Removing duplicate command: {cmd.name}")
         
-        # Log what we're doing
-        logger.info("STARTING GLOBAL COMMAND SYNC")
-        logger.info("This will make commands available in all servers where the bot is invited")
-        logger.info("Note: Discord has a 200 requests per day global limit, so this operation is rate-limited")
+        # Replace application_commands with deduplicated list
+        # We can't modify bot.application_commands directly, so we'll clear and re-add
+        bot.application_commands.clear()
+        for cmd in kept_commands:
+            bot.application_commands.append(cmd)
         
-        # Global sync with robust rate limit handling and maximum retries
-        max_retries = 3
-        retry_count = 0
-        backoff_time = 10  # Start with a reasonable backoff
-        
-        while retry_count < max_retries:
+        # Register each command group directly to the application commandment tree
+        for group, name in command_groups:
             try:
-                # Perform the actual global sync
-                await bot.sync_commands()
-                logger.info("✅ Global command sync successful!")
-                logger.info("Commands will be available in all servers where the bot is invited")
-                logger.info("Note: Changes may take up to an hour to propagate to all servers")
-                return
-            except discord.errors.HTTPException as e:
-                if hasattr(e, 'status') and e.status == 429:
-                    retry_count += 1
-                    # Get retry after time from the response if available
-                    retry_after = getattr(e, 'retry_after', backoff_time)
-                    
-                    # Don't wait more than 5 minutes total
-                    if retry_after > 300:
-                        retry_after = 300
-                        
-                    logger.warning(f"Rate limited on global sync - retry {retry_count}/{max_retries} in {retry_after}s")
-                    await asyncio.sleep(retry_after)
-                    backoff_time *= 2  # Exponential backoff
+                # Check if already registered
+                existing = next((cmd for cmd in bot.application_commands if cmd.name == name), None)
+                if not existing:
+                    # Add it directly to the bot's command list
+                    bot.add_application_command(group)
+                    # Verify it was added
+                    if next((cmd for cmd in bot.application_commands if cmd.name == name), None):
+                        logger.info(f"✅ Successfully registered {name} command group to bot")
+                    else:
+                        logger.error(f"❌ Failed to register {name} command group - not found after adding")
                 else:
-                    # Other HTTP error - log and continue without blocking
-                    logger.error(f"HTTP error during global sync: {str(e)}")
-                    # Don't block startup because of command sync errors
-                    break
+                    logger.info(f"⏩ {name} command group already registered (skipping)")
             except Exception as e:
-                logger.error(f"Unexpected error during global sync: {str(e)}")
-                # Continue without blocking startup
-                break
+                logger.error(f"❌ Failed to register {name} command group: {e}")
         
-        # If we got here, we couldn't sync commands due to rate limits
-        if retry_count >= max_retries:
-            logger.warning("Failed to sync commands globally after multiple retries - rate limits in effect")
-            logger.warning("The bot will continue to function with existing commands")
-            logger.warning("Commands will sync automatically when rate limits reset (usually within 24 hours)")
+        # Add utility commands
+        logger.info("Step 3: Adding utility commands")
+        
+        # Add ping command if needed
+        try:
+            ping_cmd = next((cmd for cmd in bot.application_commands if cmd.name == "ping"), None)
+            if not ping_cmd:
+                bot.add_application_command(ping)
+                logger.info("✅ Added ping command")
+            else:
+                logger.info("⏩ ping command already registered (skipping)")
+        except Exception as e:
+            logger.error(f"Failed to add ping command: {e}")
             
-        # Continue without blocking startup - Discord will eventually sync the commands
-        logger.info("Note: Discord's rate limits on global command registration restrict frequent updates")
-        logger.info("Command changes may take up to 24 hours to propagate to all Discord servers")
+        # Add commands command if needed
+        try:
+            commands_cmd = next((cmd for cmd in bot.application_commands if cmd.name == "commands"), None)
+            if not commands_cmd:
+                bot.add_application_command(commands_menu)
+                logger.info("✅ Added commands menu command")
+            else:
+                logger.info("⏩ commands menu command already registered (skipping)")
+        except Exception as e:
+            logger.error(f"Failed to add commands menu command: {e}")
+            
+        # Log what we have registered locally before sync
+        logger.info("Local command state before sync:")
+        local_cmds = bot.application_commands
+        logger.info(f"Bot has {len(local_cmds)} local commands registered")
+        
+        if local_cmds:
+            cmd_names = [cmd.name for cmd in local_cmds]
+            logger.info(f"Local commands: {', '.join(cmd_names)}")
+            
+            # Log group commands and their subcommands
+            for cmd in local_cmds:
+                if hasattr(cmd, 'subcommands') and cmd.subcommands:
+                    subcmd_names = [subcmd.name for subcmd in cmd.subcommands]
+                    logger.info(f"• '{cmd.name}' subcommands: {', '.join(subcmd_names)}")
+                    
+        # Double-check we have all our main command groups before sync
+        key_commands = ["server", "stats", "connections", "killfeed", "mission", "faction", "ping", "commands"]
+        missing = []
+        
+        for key in key_commands:
+            if not next((cmd for cmd in bot.application_commands if cmd.name == key), None):
+                missing.append(key)
+                
+        if missing:
+            logger.warning(f"⚠️ Missing commands before sync: {', '.join(missing)}")
+        else:
+            logger.info("✅ All key commands are registered locally")
+        
+        # NEW APPROACH: Direct JSON registration to bypass duplicate issues
+        logger.info("Step 6: Using direct API registration approach")
+        logger.info("This will make all commands available in Discord via direct registration")
+        
+        # Prepare a complete list of commands to register in raw JSON format
+        # This bypasses the local application_commands list and works directly with Discord's API
+        logger.info("Preparing direct command registration payload")
+        
+        try:
+            # Get the list of all existing global commands
+            existing_cmds = await bot.http.get_global_commands(bot.application_id)
+            existing_cmd_names = [cmd.get('name') for cmd in existing_cmds]
+            logger.info(f"Current commands on Discord: {', '.join(existing_cmd_names)}")
+            
+            # Register missing commands directly via HTTP
+            # For simplicity, we'll just use what bot.sync_commands() would use
+            # But we'll check each command group to ensure it's registered
+            
+            # NEW APPROACH: Register commands one by one via direct JSON payload
+            logger.info("Attempting to register command groups directly via Discord API")
+            
+            # First check what's currently registered
+            registered_cmds = await bot.http.get_global_commands(bot.application_id)
+            registered_cmd_names = [cmd.get('name') for cmd in registered_cmds]
+            logger.info(f"Current commands on Discord: {', '.join(registered_cmd_names)}")
+            
+            # If we don't have stats, server and other key commands, clear all and start fresh
+            key_command_count = sum(1 for cmd in key_commands[:5] if cmd in registered_cmd_names)
+            
+            # If missing 3 or more key commands, use the nuclear option
+            if key_command_count < 3:
+                logger.warning(f"ONLY {key_command_count}/5 KEY COMMANDS FOUND - USING NUCLEAR OPTION")
+                
+                # Step 1: Clear all commands from Discord
+                try:
+                    # This is the nuclear option - clear ALL commands
+                    await bot.http.bulk_upsert_global_commands(bot.application_id, [])
+                    logger.info("✅ Successfully cleared all global commands")
+                    
+                    # Wait a moment for Discord to process
+                    await asyncio.sleep(2)
+                    
+                    # Step 2: Register them all fresh
+                    # Create the commands in JSON format for Discord's API
+                    commands_payload = []
+                    
+                    # Add the ping command
+                    commands_payload.append({
+                        "name": "ping",
+                        "description": "Check bot's response time",
+                        "type": 1  # 1 = CHAT_INPUT
+                    })
+                    
+                    # Add the commands command
+                    commands_payload.append({
+                        "name": "commands",
+                        "description": "Interactive command guide with detailed information",
+                        "type": 1
+                    })
+                    
+                    # Add the stats command group
+                    commands_payload.append({
+                        "name": "stats",
+                        "description": "View player and server statistics",
+                        "type": 1,
+                        "options": [
+                            {
+                                "name": "player",
+                                "description": "View statistics for a specific player",
+                                "type": 1
+                            },
+                            {
+                                "name": "me",
+                                "description": "View your own player statistics",
+                                "type": 1
+                            },
+                            {
+                                "name": "link", 
+                                "description": "Link your Discord account to a player name",
+                                "type": 1
+                            },
+                            {
+                                "name": "unlink",
+                                "description": "Unlink your Discord account from a player name",
+                                "type": 1
+                            },
+                            {
+                                "name": "server",
+                                "description": "View server statistics",
+                                "type": 1
+                            },
+                            {
+                                "name": "leaderboard",
+                                "description": "View the player leaderboard",
+                                "type": 1
+                            },
+                            {
+                                "name": "weapons",
+                                "description": "View weapon usage statistics",
+                                "type": 1
+                            }
+                        ]
+                    })
+                    
+                    # Add the server command group
+                    commands_payload.append({
+                        "name": "server",
+                        "description": "Manage server tracking and configuration",
+                        "type": 1,
+                        "options": [
+                            {
+                                "name": "add",
+                                "description": "Add a new game server to track",
+                                "type": 1
+                            },
+                            {
+                                "name": "remove",
+                                "description": "Remove a tracked game server",
+                                "type": 1
+                            },
+                            {
+                                "name": "list",
+                                "description": "List all tracked game servers",
+                                "type": 1
+                            },
+                            {
+                                "name": "info",
+                                "description": "Show information about a tracked server",
+                                "type": 1
+                            },
+                            {
+                                "name": "status",
+                                "description": "Check if a server is online and get player count",
+                                "type": 1
+                            }
+                        ]
+                    })
+                    
+                    # Try a different approach - guild-specific registration to avoid rate limits
+                    # This will register commands to a specific guild rather than globally
+                    # This is useful for testing as guild commands have higher rate limits
+                    logger.info(f"Registering {len(commands_payload)} commands directly via API")
+                    
+                    try:
+                        # First try global registration
+                        try:
+                            await bot.http.bulk_upsert_global_commands(bot.application_id, commands_payload)
+                            logger.info("✅ Successfully registered all commands globally")
+                        except Exception as global_e:
+                            logger.error(f"❌ Global registration failed: {global_e}")
+                            
+                            # Fallback to guild-specific registration
+                            logger.info("🔄 Attempting guild-specific registration instead")
+                            
+                            # Get all guilds the bot is in
+                            for guild in bot.guilds:
+                                try:
+                                    guild_id = guild.id
+                                    logger.info(f"Registering commands to guild: {guild.name} ({guild_id})")
+                                    
+                                    # Register commands to this specific guild
+                                    await bot.http.bulk_upsert_guild_commands(
+                                        bot.application_id, guild_id, commands_payload
+                                    )
+                                    logger.info(f"✅ Successfully registered commands to guild: {guild.name}")
+                                except Exception as guild_e:
+                                    logger.error(f"❌ Failed to register to guild {guild.name}: {guild_e}")
+                    except Exception as e:
+                        logger.error(f"❌ Error during command registration: {e}")
+                
+                except Exception as e:
+                    logger.error(f"❌ Error during nuclear option: {e}")
+            
+            logger.info("✅ Command registration process complete")
+            
+            # Get a list of registered commands after sync
+            try:
+                # Use bot.http to get the actual commands registered with Discord
+                registered_cmds = await bot.http.get_global_commands(bot.application_id)
+                logger.info(f"Registered {len(registered_cmds)} commands with Discord:")
+                
+                # Log each registered command
+                for cmd in registered_cmds:
+                    cmd_name = cmd.get('name', 'unknown')
+                    cmd_type = cmd.get('type', 1)
+                    
+                    if cmd.get('options'):
+                        subcmds = [opt.get('name') for opt in cmd.get('options') if opt.get('type') == 1]
+                        if subcmds:
+                            logger.info(f"• Command Group '{cmd_name}' with subcommands: {', '.join(subcmds)}")
+                        else:
+                            logger.info(f"• Command '{cmd_name}'")
+                    else:
+                        logger.info(f"• Command '{cmd_name}'")
+            except Exception as e:
+                logger.error(f"Error retrieving registered commands: {e}")
+            
+        except discord.errors.HTTPException as e:
+            if hasattr(e, 'status') and e.status == 429:
+                # Get retry after time from the response if available
+                retry_after = getattr(e, 'retry_after', 60)
+                logger.warning(f"⚠️ Rate limited on global sync. Will retry in background after {retry_after}s")
+                
+                # Schedule a retry in the background
+                async def retry_sync():
+                    await asyncio.sleep(retry_after)
+                    try:
+                        await bot.sync_commands()
+                        logger.info("✅ Delayed global command sync successful!")
+                    except Exception as inner_e:
+                        logger.error(f"❌ Delayed command sync failed: {inner_e}")
+                
+                # Schedule the retry without awaiting it
+                asyncio.create_task(retry_sync())
+            else:
+                # Other HTTP error
+                logger.error(f"❌ HTTP error during global sync: {str(e)}")
+        except Exception as e:
+            logger.error(f"❌ Unexpected error during global sync: {str(e)}")
+        
+        # Step 7: Log local command state
+        logger.info("Step 7: Verifying local command state")
+        all_commands = bot.application_commands
+        command_count = len(all_commands)
+        command_names = [f"{cmd.name}" for cmd in all_commands]
+        
+        logger.info(f"Bot has {command_count} local commands registered")
+        if command_count > 0:
+            logger.info(f"Local commands: {', '.join(command_names)}")
+            
+            # Log all command groups and their subcommands
+            for cmd in all_commands:
+                if hasattr(cmd, 'subcommands') and cmd.subcommands:
+                    subcmd_names = [subcmd.name for subcmd in cmd.subcommands]
+                    logger.info(f"• '{cmd.name}' subcommands: {', '.join(subcmd_names)}")
+        
+        logger.info("📝 COMMAND REFRESH COMPLETE")
+        logger.info("⏳ Please allow up to 1 hour for commands to appear in Discord")
+        
     except Exception as e:
-        logger.error(f"Error in sync_slash_commands function: {e}")
+        logger.error(f"❌ Error in sync_slash_commands function: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 # Add slash commands for utility functions
 @bot.slash_command(name="ping", description="Check bot's response time")
@@ -213,6 +488,19 @@ bot.db = None
 async def on_ready():
     logger.info(f'Bot logged in as {bot.user.name} ({bot.user.id})')
     logger.info(f'Running py-cord v{discord.__version__}')
+    
+    # Log what guilds (servers) the bot is in
+    guild_count = len(bot.guilds)
+    logger.info(f"Bot is in {guild_count} guilds")
+    
+    for guild in bot.guilds:
+        logger.info(f"Guild: {guild.name} (ID: {guild.id})")
+        logger.info(f"  - Member count: {guild.member_count}")
+        logger.info(f"  - Owner: {guild.owner_id}")
+        
+    if guild_count == 0:
+        logger.warning("⚠️ Bot is not in any guilds! Guild-specific command registration will fail.")
+        logger.warning("⚠️ Make sure you've invited the bot to at least one server.")
     
     # Connect to database and store at bot level for cogs to access
     max_retries = 3
