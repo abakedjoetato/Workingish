@@ -300,57 +300,30 @@ async def sync_slash_commands():
                     
                     # Check if we already have some commands registered with Discord
                     # and avoid unnecessary API calls
-                    current_global_commands = await bot.http.get_global_commands(bot.application_id)
-                    current_command_count = len(current_global_commands)
+                    try:
+                        current_global_commands = await bot.http.get_global_commands(bot.application_id)
+                        current_command_count = len(current_global_commands)
+                        
+                        if current_command_count >= 3:
+                            # We already have enough commands registered - don't risk rate limits
+                            logger.info(f"✓ Found {current_command_count} commands already registered - skipping registration to avoid rate limits")
+                            logger.info(f"Registered command names: {', '.join(cmd.get('name', 'unknown') for cmd in current_global_commands)}")
+                            logger.info("Command registration skipped to prevent rate limiting")
+                            return
+                        
+                        # If we get here, we really need to register commands
+                        logger.info(f"Only found {current_command_count} commands - registration needed")
+                    except Exception as e:
+                        logger.error(f"Error checking existing commands: {e}")
+                        logger.info("Proceeding with registration as we couldn't verify existing commands")
                     
-                    if current_command_count >= 3:
-                        # We already have enough commands registered - don't risk rate limits
-                        logger.info(f"✓ Found {current_command_count} commands already registered - skipping registration to avoid rate limits")
-                        logger.info(f"Registered command names: {', '.join(cmd.get('name', 'unknown') for cmd in current_global_commands)}")
-                        logger.info("Command registration skipped to prevent rate limiting")
-                        return
-                    
-                    # If we get here, we really need to register commands
-                    logger.info(f"Only found {current_command_count} commands - registration needed")
                     logger.info(f"Registering {len(commands_payload)} commands directly via API")
                     
                     try:
-                        # Pick the most reliable approach - go for guild-specific first since it has higher rate limits
-                        if bot.guilds:
-                            # Use guild registration which has much higher rate limits
-                            logger.info("🔄 Using guild-specific registration which has higher rate limits")
-                            success = False
-                            
-                            # Get all guilds the bot is in
-                            for guild in bot.guilds:
-                                try:
-                                    guild_id = guild.id
-                                    logger.info(f"Registering commands to guild: {guild.name} ({guild_id})")
-                                    
-                                    # Register commands to this specific guild
-                                    await bot.http.bulk_upsert_guild_commands(
-                                        bot.application_id, guild_id, commands_payload
-                                    )
-                                    logger.info(f"✅ Successfully registered commands to guild: {guild.name}")
-                                    success = True
-                                    # Stop after one successful registration to avoid rate limits
-                                    break
-                                except Exception as guild_e:
-                                    logger.error(f"❌ Failed to register to guild {guild.name}: {guild_e}")
-                            
-                            # Only attempt global registration if guild registration failed
-                            if not success:
-                                logger.info("Guild registration failed, falling back to global registration")
-                                try:
-                                    await bot.http.bulk_upsert_global_commands(bot.application_id, commands_payload)
-                                    logger.info("✅ Successfully registered all commands globally")
-                                except Exception as global_e:
-                                    logger.error(f"❌ Global registration failed: {global_e}")
-                        else:
-                            # No guilds available, must use global registration
-                            logger.info("No guilds available, using global registration only")
-                            await bot.http.bulk_upsert_global_commands(bot.application_id, commands_payload)
-                            logger.info("✅ Successfully registered all commands globally")
+                        # GLOBAL ONLY - per user instructions, no guild-specific registration
+                        logger.info("Registering commands globally ONLY - guild-specific registration disabled")
+                        await bot.http.bulk_upsert_global_commands(bot.application_id, commands_payload)
+                        logger.info("✅ Successfully registered all commands globally")
                     except Exception as e:
                         logger.error(f"❌ Error during command registration: {e}")
                 
