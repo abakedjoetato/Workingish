@@ -379,12 +379,12 @@ async def sync_slash_commands():
         
         # Import all command groups to make sure they're available
         logger.info("Step 1: Importing all command groups")
-        from cogs.server_commands_slash import server_group 
+        from cogs.server_commands_refactored import server_group 
         from cogs.connection_commands import connection_group
-        from cogs.killfeed_commands import killfeed_group
-        from cogs.mission_commands import mission_group
+        from cogs.killfeed_commands_refactored import killfeed_group
+        from cogs.mission_commands_refactored import mission_group
         from cogs.faction_commands import faction_group
-        from cogs.stats_commands import stats_group
+        from cogs.stats_commands_refactored import stats_group
         
         # Register all command groups to the bot - without clearing existing ones first
         logger.info("Step 2: Registering all command groups to bot")

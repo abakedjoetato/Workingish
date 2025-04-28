@@ -85,16 +85,39 @@ class CommandSyncManager:
                     
                     # Process each command or group
                     for cmd in cog_commands:
+                        # Apply command fix for integration_types and contexts
                         if isinstance(cmd, discord.SlashCommandGroup):
-                            # For command groups, convert to dict
-                            cmd_payload = cmd.to_dict()
-                            commands_payload.append(cmd_payload)
-                            logger.info(f"Added slash command group: {cmd.name}")
+                            # Fix command group attributes first
+                            try:
+                                from utils.command_fix import fix_command_group
+                                cmd = fix_command_group(cmd)
+                                
+                                # For command groups, convert to dict
+                                cmd_payload = cmd.to_dict()
+                                commands_payload.append(cmd_payload)
+                                logger.info(f"Added slash command group: {cmd.name}")
+                            except Exception as fix_err:
+                                logger.error(f"Error fixing command group {cmd.name}: {fix_err}")
+                                import traceback
+                                logger.error(traceback.format_exc())
+                                continue
                         elif isinstance(cmd, discord.ApplicationCommand):
                             # For regular commands, convert to dict
-                            cmd_payload = cmd.to_dict()
-                            commands_payload.append(cmd_payload)
-                            logger.info(f"Added application command: {cmd.name}")
+                            # Attempt to fix command attributes first if needed
+                            try:
+                                if hasattr(cmd, 'integration_types') and (cmd.integration_types is None or len(cmd.integration_types) == 0):
+                                    cmd.integration_types = [1]  # 1 = GUILD_INSTALL
+                                if hasattr(cmd, 'contexts') and (cmd.contexts is None or len(cmd.contexts) == 0):
+                                    cmd.contexts = [2]  # 2 = GUILD
+                                    
+                                cmd_payload = cmd.to_dict()
+                                commands_payload.append(cmd_payload)
+                                logger.info(f"Added application command: {cmd.name}")
+                            except Exception as fix_err:
+                                logger.error(f"Error fixing application command {cmd.name}: {fix_err}")
+                                import traceback
+                                logger.error(traceback.format_exc())
+                                continue
                         else:
                             logger.warning(f"Unknown command type from {cog_name}: {type(cmd)}")
                 except Exception as e:
