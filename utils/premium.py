@@ -1,339 +1,358 @@
+"""
+Premium Tier System
+
+This module handles premium tier checks and feature access control.
+"""
+
 import logging
-import discord
-from config import PREMIUM_TIERS
+from datetime import datetime
 
 logger = logging.getLogger('deadside_bot.utils.premium')
 
-async def get_premium_tiers():
-    """
-    Get the available premium tiers and their limits
-    
-    Returns:
-        dict: Premium tier configuration
-    """
-    # This could be extended to fetch from a database or API
-    if not PREMIUM_TIERS:
-        logger.error("PREMIUM_TIERS is not defined in config")
-        # Provide fallback defaults to prevent NoneType errors
-        return {
-            "survivor": {
-                "max_servers": 1,
-                "historical_parsing": False,
-                "max_history_days": 0,
-                "custom_embeds": False,
-                "advanced_stats": False,
-            }
-        }
-    return PREMIUM_TIERS
+# Define premium tiers
+PREMIUM_TIERS = {
+    "survivor": {
+        "name": "Survivor",
+        "emoji": "🔪",
+        "max_servers": 1,
+        "features": [
+            "basic_stats",
+            "killfeed",
+            "player_linking"
+        ]
+    },
+    "warlord": {
+        "name": "Warlord",
+        "emoji": "🗡️",
+        "max_servers": 3,
+        "features": [
+            "basic_stats",
+            "killfeed",
+            "player_linking",
+            "advanced_stats",
+            "batch_processing",
+            "faction_system",
+            "advanced_killfeed",
+            "mission_alerts",
+            "rivalry_tracking",
+            "event_tracking"
+        ]
+    },
+    "overseer": {
+        "name": "Overseer",
+        "emoji": "👑",
+        "max_servers": 10,
+        "features": [
+            "basic_stats",
+            "killfeed",
+            "player_linking",
+            "advanced_stats",
+            "batch_processing",
+            "faction_system",
+            "advanced_killfeed",
+            "mission_alerts",
+            "rivalry_tracking",
+            "event_tracking",
+            "priority_support",
+            "custom_branding",
+            "extended_history"
+        ]
+    }
+}
 
-async def get_premium_limits(tier):
-    """
-    Get the limits for a specific premium tier
-    
-    Args:
-        tier: Premium tier name
-        
-    Returns:
-        dict: Limits for the specified tier
-    """
-    try:
-        tiers = await get_premium_tiers()
-        
-        # Ensure tier is a string and not None
-        tier_key = str(tier) if tier else "survivor"
-        
-        # Maps old tier names to new ones for backward compatibility
-        tier_mapping = {
-            "free": "survivor",
-            "premium": "warlord",
-            "enterprise": "overseer"
-        }
-        
-        # Use the new tier name if the old one was provided
-        if tier_key in tier_mapping:
-            tier_key = tier_mapping[tier_key]
-            
-        # Return the specified tier or fall back to survivor
-        return tiers.get(tier_key, tiers.get("survivor", {}))
-    except Exception as e:
-        logger.error(f"Error getting premium limits: {e}")
-        # Return fallback defaults to prevent NoneType errors
-        return {
-            "max_servers": 1,
-            "historical_parsing": False,
-            "max_history_days": 0,
-            "custom_embeds": False,
-            "advanced_stats": False,
-        }
-
-async def get_guild_premium_tier(guild_id):
+async def get_guild_tier(db, guild_id):
     """
     Get the premium tier for a guild
     
     Args:
+        db: Database connection
         guild_id: Discord guild ID
         
     Returns:
-        str: Premium tier name
+        str: Tier name (survivor, warlord, overseer)
     """
+    if not db or not guild_id:
+        logger.error("Missing database or guild_id in get_guild_tier")
+        return "survivor"  # Default tier
+        
     try:
-        # Get database instance
-        from database.connection import Database
-        db = await Database.get_instance()
+        guild_configs = await db.get_collection("guild_configs")
+        config = await guild_configs.find_one({"guild_id": guild_id})
         
-        if db is None:
-            import logging
-            logging.getLogger('deadside_bot.utils.premium').error("Database instance is None in get_guild_premium_tier")
-            return "survivor"
+        if not config or "premium_tier" not in config:
+            return "survivor"  # Default tier
             
-        # Home guild always has overseer tier (previously enterprise)
-        try:
-            is_home = await db.is_home_guild(guild_id)
-            if is_home:
-                return "overseer"
-        except Exception as e:
-            import logging
-            logging.getLogger('deadside_bot.utils.premium').error(f"Error checking home guild status: {e}")
-            # Continue to get tier directly
-        
-        # Get guild configuration
-        try:
-            return await db.get_guild_premium_tier(guild_id)
-        except Exception as e:
-            import logging
-            logging.getLogger('deadside_bot.utils.premium').error(f"Error getting premium tier from db: {e}")
-            return "survivor"
+        return config["premium_tier"]
     except Exception as e:
-        import logging
-        logging.getLogger('deadside_bot.utils.premium').error(f"Unexpected error in get_guild_premium_tier: {e}")
-        return "survivor"
+        logger.error(f"Error in get_guild_tier: {e}")
+        return "survivor"  # Default tier on error
 
-async def set_premium_tier(guild_id, tier, ctx=None):
+async def get_max_servers(db, guild_id):
     """
-    Set the premium tier for a guild
+    Get the maximum number of servers a guild can have
     
     Args:
+        db: Database connection
         guild_id: Discord guild ID
-        tier: Premium tier name
-        ctx: Optional Discord context for permission check
+        
+    Returns:
+        int: Maximum number of servers
+    """
+    tier = await get_guild_tier(db, guild_id)
+    return PREMIUM_TIERS.get(tier, PREMIUM_TIERS["survivor"])["max_servers"]
+
+async def check_feature_access(db, guild_id, feature):
+    """
+    Check if a guild has access to a specific feature
+    
+    Args:
+        db: Database connection
+        guild_id: Discord guild ID
+        feature: Feature to check
+        
+    Returns:
+        bool: True if the guild has access, False otherwise
+    """
+    tier = await get_guild_tier(db, guild_id)
+    tier_features = PREMIUM_TIERS.get(tier, PREMIUM_TIERS["survivor"])["features"]
+    return feature in tier_features
+
+async def check_premium_feature(db, ctx, feature, silent=False):
+    """
+    Check if a guild has access to a premium feature and respond accordingly
+    
+    Args:
+        db: Database connection
+        ctx: Command context
+        feature: Feature to check
+        silent: Whether to silently return or respond with a message
+        
+    Returns:
+        bool: True if the guild has access, False otherwise
+    """
+    if not db or not ctx or not feature:
+        return False
+        
+    try:
+        # Get the guild ID from the context
+        guild_id = ctx.guild.id
+        
+        # Check if the guild has access to the feature
+        has_access = await check_feature_access(db, guild_id, feature)
+        
+        if not has_access and not silent:
+            # Get tier info for messaging
+            tier_info = await get_tier_display_info(db, guild_id)
+            
+            # Find which tier has this feature
+            min_tier = None
+            for tier_id, tier_data in PREMIUM_TIERS.items():
+                if feature in tier_data["features"]:
+                    if min_tier is None or PREMIUM_TIERS[tier_id]["max_servers"] < PREMIUM_TIERS[min_tier]["max_servers"]:
+                        min_tier = tier_id
+            
+            if min_tier:
+                required_tier = PREMIUM_TIERS[min_tier]["name"]
+                await ctx.respond(
+                    f"⚠️ This feature requires the **{required_tier}** tier. "
+                    f"Your server is currently on the **{tier_info['name']}** tier. "
+                    f"Please contact an administrator to upgrade.",
+                    ephemeral=True
+                )
+            else:
+                await ctx.respond(
+                    f"⚠️ You don't have access to this feature. "
+                    f"Your server is currently on the **{tier_info['name']}** tier.",
+                    ephemeral=True
+                )
+        
+        return has_access
+    except Exception as e:
+        logger.error(f"Error in check_premium_feature: {e}")
+        if not silent:
+            await ctx.respond("❌ An error occurred while checking feature access.", ephemeral=True)
+        return False
+
+async def get_tier_display_info(db, guild_id):
+    """
+    Get display information for a guild's tier
+    
+    Args:
+        db: Database connection
+        guild_id: Discord guild ID
+        
+    Returns:
+        dict: Display information including name, emoji, etc.
+    """
+    tier = await get_guild_tier(db, guild_id)
+    tier_info = PREMIUM_TIERS.get(tier, PREMIUM_TIERS["survivor"])
+    
+    return {
+        "name": tier_info["name"],
+        "emoji": tier_info["emoji"],
+        "max_servers": tier_info["max_servers"],
+        "tier_id": tier
+    }
+
+async def count_guild_servers(db, guild_id):
+    """
+    Count the number of servers a guild has
+    
+    Args:
+        db: Database connection
+        guild_id: Discord guild ID
+        
+    Returns:
+        int: Number of servers
+    """
+    if not db or not guild_id:
+        logger.error("Missing database or guild_id in count_guild_servers")
+        return 0
+        
+    try:
+        servers_collection = await db.get_collection("servers")
+        count = await servers_collection.count_documents({"guild_id": guild_id})
+        return count
+    except Exception as e:
+        logger.error(f"Error in count_guild_servers: {e}")
+        return 0
+
+async def update_guild_tier(db, guild_id, tier):
+    """
+    Update a guild's premium tier
+    
+    Args:
+        db: Database connection
+        guild_id: Discord guild ID
+        tier: Tier to set
         
     Returns:
         bool: True if successful, False otherwise
     """
-    # Get database instance
-    from database.connection import Database
-    db = await Database.get_instance()
-    
-    # Don't allow changing home guild tier
-    if await db.is_home_guild(guild_id):
-        if ctx:
-            await ctx.send("⚠️ Home guild tier cannot be changed.")
+    if tier not in PREMIUM_TIERS:
+        logger.error(f"Invalid tier '{tier}' in update_guild_tier")
         return False
-    
-    # Validate tier
-    tiers = await get_premium_tiers()
-    if tier not in tiers:
-        if ctx:
-            await ctx.send(f"⚠️ Invalid premium tier: {tier}")
+        
+    if not db or not guild_id:
+        logger.error("Missing database or guild_id in update_guild_tier")
         return False
-    
+        
     try:
-        # Update tier in database
-        await db.set_guild_premium_tier(guild_id, tier)
-        
-        if ctx:
-            await ctx.send(f"✅ Updated premium tier for guild {guild_id} to {tier}")
-        
-        logger.info(f"Updated premium tier for guild {guild_id} to {tier}")
+        guild_configs = await db.get_collection("guild_configs")
+        result = await guild_configs.update_one(
+            {"guild_id": guild_id},
+            {"$set": {
+                "premium_tier": tier,
+                "tier_updated_at": datetime.utcnow()
+            }},
+            upsert=True
+        )
         return True
     except Exception as e:
-        logger.error(f"Failed to update premium tier: {e}")
-        if ctx:
-            await ctx.send("⚠️ Failed to update premium tier.")
+        logger.error(f"Error in update_guild_tier: {e}")
         return False
 
-async def check_premium_feature(guild_id, feature):
+async def get_premium_features_list(tier_id=None):
     """
-    Check if a guild has access to a premium feature
+    Get a list of features for a specific tier or all tiers
     
     Args:
-        guild_id: Discord guild ID
-        feature: Feature name to check
+        tier_id: Optional tier ID to get features for
         
     Returns:
-        bool: True if the guild has access to the feature
+        dict: Features by tier or for specific tier
     """
-    # Get premium tier for guild
-    tier = await get_guild_premium_tier(guild_id)
-    
-    # Get premium limits
-    limits = await get_premium_limits(tier)
-    
-    # Check if feature exists and is enabled
-    return feature in limits and limits[feature]
-
-async def check_and_notify_limits(ctx, guild_id, feature, current_count=None):
-    """
-    Check if a guild is approaching or has reached limits for a feature
-    
-    Args:
-        ctx: Discord command context
-        guild_id: Discord guild ID
-        feature: Feature to check (e.g., 'max_servers')
-        current_count: Current usage count
+    if tier_id and tier_id in PREMIUM_TIERS:
+        return PREMIUM_TIERS[tier_id]["features"]
         
-    Returns:
-        bool: True if under the limit, False if at or over the limit
-    """
-    # Get premium tier for guild
-    tier = await get_guild_premium_tier(guild_id)
-    
-    # Get premium limits
-    limits = await get_premium_limits(tier)
-    
-    # Check if feature has a limit
-    if feature not in limits:
-        return True
-    
-    max_value = limits[feature]
-    
-    # Skip if no limit or current count not provided
-    if max_value is None or current_count is None:
-        return True
-    
-    # Check if over limit
-    if current_count >= max_value:
-        await ctx.send(f"⚠️ You've reached your {feature} limit ({max_value}). "
-                      f"Upgrade your premium tier for higher limits.")
-        return False
-    
-    # Check if approaching limit (80% or higher)
-    if current_count >= (max_value * 0.8):
-        await ctx.send(f"⚠️ You're approaching your {feature} limit ({current_count}/{max_value}). "
-                      f"Consider upgrading your premium tier for higher limits.")
-    
-    return True
+    return {
+        tier: info["features"] 
+        for tier, info in PREMIUM_TIERS.items()
+    }
 
-async def is_home_guild(guild_id):
+async def get_premium_limits(db, guild_id):
     """
-    Check if a guild is the home guild
+    Get the premium limits for a guild
     
     Args:
+        db: Database connection
         guild_id: Discord guild ID
         
     Returns:
-        bool: True if the guild is the home guild
+        dict: Premium limits
     """
-    try:
-        if guild_id is None:
-            return False
-            
-        from database.connection import Database
-        db = await Database.get_instance()
+    tier = await get_guild_tier(db, guild_id)
+    tier_info = PREMIUM_TIERS.get(tier, PREMIUM_TIERS["survivor"])
+    
+    # Calculate history limits based on tier
+    history_days = 1  # Default for survivor tier
+    if tier == "warlord":
+        history_days = 7
+    elif tier == "overseer":
+        history_days = 30
         
-        if db is None:
-            import logging
-            logging.getLogger('deadside_bot.utils.premium').error("Database instance is None in is_home_guild")
-            return False
-            
-        return await db.is_home_guild(guild_id)
-    except Exception as e:
-        import logging
-        logging.getLogger('deadside_bot.utils.premium').error(f"Error in is_home_guild: {e}")
-        return False
+    # Build limits object
+    limits = {
+        "max_servers": tier_info["max_servers"],
+        "history_days": history_days,
+        "max_factions": 0,  # Default for survivor tier
+        "max_rivals": 0,    # Default for survivor tier
+        "can_use_batches": "batch_processing" in tier_info["features"],
+        "can_use_factions": "faction_system" in tier_info["features"],
+        "can_use_rivalry": "rivalry_tracking" in tier_info["features"],
+        "can_use_advanced_stats": "advanced_stats" in tier_info["features"]
+    }
+    
+    # Set faction and rival limits based on tier
+    if tier == "warlord":
+        limits["max_factions"] = 5
+        limits["max_rivals"] = 3
+    elif tier == "overseer":
+        limits["max_factions"] = 15
+        limits["max_rivals"] = 10
+        
+    return limits
 
-async def set_home_guild(guild_id, ctx=None):
+async def format_tier_comparison():
     """
-    Set the home guild
+    Format a tier comparison for display
     
-    Args:
-        guild_id: Discord guild ID to set as home
-        ctx: Optional Discord context for response
-        
     Returns:
-        bool: True if successful
+        dict: Formatted tier comparison
     """
-    try:
-        from database.connection import Database
-        db = await Database.get_instance()
+    all_features = set()
+    for tier_info in PREMIUM_TIERS.values():
+        all_features.update(tier_info["features"])
+    
+    feature_display_names = {
+        "basic_stats": "Basic Player Statistics",
+        "killfeed": "Killfeed Notifications",
+        "player_linking": "Main/Alt Character Linking",
+        "advanced_stats": "Advanced Statistics",
+        "batch_processing": "Historical Data Processing",
+        "faction_system": "Faction System",
+        "advanced_killfeed": "Advanced Killfeed",
+        "mission_alerts": "Mission Alerts",
+        "rivalry_tracking": "Rivalry Tracking",
+        "event_tracking": "Event Tracking",
+        "priority_support": "Priority Support",
+        "custom_branding": "Custom Branding",
+        "extended_history": "Extended History (30 days)"
+    }
+    
+    comparison = {
+        "features": [],
+        "tiers": {tier: {"name": info["name"], "emoji": info["emoji"], "has_feature": []} for tier, info in PREMIUM_TIERS.items()}
+    }
+    
+    # Sort features by availability
+    sorted_features = sorted(all_features, key=lambda f: len([1 for tier_id, tier_info in PREMIUM_TIERS.items() if f in tier_info["features"]]))
+    
+    for feature in sorted_features:
+        display_name = feature_display_names.get(feature, feature.replace("_", " ").title())
+        comparison["features"].append(display_name)
         
-        if db is None:
-            logger.error("Database instance is None in set_home_guild")
-            if ctx:
-                await ctx.send("⚠️ Failed to connect to database.")
-            return False
-        
-        try:
-            await db.set_home_guild_id(guild_id)
-            
-            if ctx:
-                await ctx.send(f"✅ Set guild {guild_id} as the home guild with Overseer premium tier.")
-            
-            logger.info(f"Set guild {guild_id} as the home guild")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to set home guild: {e}")
-            if ctx:
-                await ctx.send("⚠️ Failed to set home guild.")
-            return False
-    except Exception as e:
-        logger.error(f"Unexpected error in set_home_guild: {e}")
-        if ctx:
-            await ctx.send("⚠️ Failed to set home guild due to an unexpected error.")
-        return False
-
-def is_guild_admin(ctx):
-    """
-    Check if a user is an admin in the guild
+        for tier_id, tier_info in PREMIUM_TIERS.items():
+            comparison["tiers"][tier_id]["has_feature"].append(feature in tier_info["features"])
     
-    Args:
-        ctx: Discord command context
-        
-    Returns:
-        bool: True if the user is an admin
-    """
-    if not ctx.guild:
-        return False
-    
-    # Check if user has administrator permission
-    if ctx.author.guild_permissions.administrator:
-        return True
-    
-    # Check if user has manage guild permission
-    if ctx.author.guild_permissions.manage_guild:
-        return True
-    
-    return False
-
-async def is_home_guild_admin(ctx):
-    """
-    Check if a user is an admin in the home guild
-    
-    Args:
-        ctx: Discord command context
-        
-    Returns:
-        bool: True if the user is an admin in the home guild
-    """
-    if not ctx.guild:
-        return False
-    
-    # Check if this is the home guild
-    if not await is_home_guild(ctx.guild.id):
-        return False
-    
-    # Check if user is an admin
-    return is_guild_admin(ctx)
-
-async def is_bot_owner(ctx):
-    """
-    Check if a user is the bot owner
-    
-    Args:
-        ctx: Discord command context
-        
-    Returns:
-        bool: True if the user is the bot owner
-    """
-    # Use built-in check
-    return await ctx.bot.is_owner(ctx.author)
+    return comparison

@@ -674,7 +674,7 @@ async def commands_menu(ctx):
     embed = discord.Embed(
         title="💎 Emerald PVP Survival Command Guide 💎",
         description="**Welcome to the Deadside Emerald Servers!**\n*These commands will help you survive, track your kills, and dominate the wasteland:*",
-        color=0x2ecc71  # Emerald green color
+        color=0x50C878  # Emerald green color from COLORS["emerald"]
     )
     
     # Add commands by category
@@ -790,28 +790,46 @@ async def commands_menu(ctx):
             inline=False
         )
     
-    # Add premium tier information
+    # Add premium tier information with emerald styling
     embed.add_field(
-        name="💎 Premium Features",
+        name="💎 Premium Tiers",
         value=(
-            "**Survivor (Free):** Basic tracking, 1 server\n"
-            "**Warlord (Premium):** Factions, rivalries, 3 servers\n"
-            "**Overseer (Enterprise):** All features, 10 servers"
+            "**🪓 Survivor (Free):** Basic tracking, 1 server\n"
+            "**🗡️ Warlord (Premium):** Factions, rivalries, 3 servers\n"
+            "**👑 Overseer (Enterprise):** All features, 10 servers"
         ),
         inline=False
     )
     
-    # Footer with styled tip
-    embed.set_footer(text="⚔️ Use the commands shown above to manage your Deadside experience")
+    # Footer with styled tip and version info
+    bot_version = getattr(bot, "version", "1.0.0")
+    embed.set_footer(text=f"⚔️ Emerald Servers Bot v{bot_version} | Type /help [command] for detailed usage")
+    
+    # Add server count if applicable
+    try:
+        from database.connection import Database
+        db = await Database.get_instance()
+        servers_collection = await db.get_collection("servers")
+        server_count = await servers_collection.count_documents({})
+        
+        if server_count > 0:
+            embed.add_field(
+                name="📡 Status", 
+                value=f"Tracking {server_count} servers | Bot latency: {round(bot.latency * 1000)}ms",
+                inline=False
+            )
+    except Exception as e:
+        logger.error(f"Error getting server count: {e}")
     
     await ctx.respond(embed=embed)
 
 # Import all cog classes for easier access
-from cogs.server_commands_slash import ServerCommands
-from cogs.stats_commands import StatsCommands
-from cogs.killfeed_commands import KillfeedCommands
+# Using refactored commands with proper slash command implementation
+from cogs.server_commands_refactored import ServerCommands
+from cogs.stats_commands_refactored import StatsCommands
+from cogs.killfeed_commands_refactored import KillfeedCommands
+from cogs.mission_commands_refactored import MissionCommands
 from cogs.connection_commands import ConnectionCommands
-from cogs.mission_commands import MissionCommands
 from cogs.admin_commands import AdminCommands
 from cogs.faction_commands import FactionCommands
 
@@ -824,8 +842,12 @@ bot.db = None
 @bot.event
 async def on_ready():
     """Called when the bot is fully ready after connecting to Discord"""
+    # Set bot version information
+    bot.version = "1.5.0"
+    
     logger.info(f'Bot logged in as {bot.user.name} ({bot.user.id})')
     logger.info(f'Running py-cord v{discord.__version__}')
+    logger.info(f'Bot version: {bot.version}')
     
     # Log what guilds (servers) the bot is in
     guild_count = len(bot.guilds)
@@ -888,7 +910,7 @@ async def on_ready():
     # Ensure mission command group has the correct name
     # This fixes the inconsistency between "mission" and "missions"
     try:
-        from cogs.mission_commands import mission_group
+        from cogs.mission_commands_refactored import mission_group
         if hasattr(mission_group, 'name') and mission_group.name != "missions":
             logger.warning(f"Fixing mission group name from '{mission_group.name}' to 'missions'")
             mission_group.name = "missions"
@@ -897,10 +919,24 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Error checking mission group name: {e}")
     
-    # Import and use new sync_retry module for better rate limit handling
+    # Use unified command sync approach with utils/sync_retry.py
     try:
-        from utils.sync_retry import safe_command_sync
+        # First ensure all cog files have the proper get_commands() method
+        # This will be handled by the cog_checks below
+        
+        # Initialize the sync_retry module first
+        from utils.sync_retry import setup, safe_command_sync
+        # Call setup to initialize the module with our bot instance
+        await setup(bot)
         logger.info("Using enhanced command registration with sync_retry module")
+        
+        # Apply fixes to command groups for issues with integration_types
+        try:
+            from utils.command_fix import apply_command_fixes
+            fixed_count = apply_command_fixes(bot)
+            logger.info(f"Applied command fixes to {fixed_count} command groups")
+        except Exception as fix_err:
+            logger.error(f"Failed to apply command fixes: {fix_err}")
         
         # Check local command registration first
         all_current_commands = [cmd.name for cmd in bot.application_commands]
@@ -911,82 +947,16 @@ async def on_ready():
             logger.warning(f"Missing {len(missing_commands)}/{len(desired_commands)} local commands: {', '.join(missing_commands)}")
         else:
             logger.info("All commands are registered locally")
-            
-        # Use the safer command sync approach
-        sync_result = await safe_command_sync(bot, force=bool(missing_commands))
+        
+        # Always force sync on startup to ensure all commands are registered
+        # The sync_retry module will handle rate limits intelligently
+        sync_result = await safe_command_sync(bot, force=True)
+        
         if sync_result:
-            logger.info("Command sync completed successfully")
+            logger.info("✅ Command sync completed successfully")
         else:
-            logger.warning("Command sync was not fully successful, will try again later")
-            
-        # Fallback to traditional sync method only if critical
-        if not sync_result and len(missing_commands) > 3:  # More than 3 missing commands is critical
-            logger.warning("Too many missing commands, trying traditional sync as fallback")
-            await sync_slash_commands()
-    except ImportError:
-        logger.warning("sync_retry module not available, using traditional command sync")
-        
-        # Traditional method using file-based cooldown
-        from pathlib import Path
-        import time
-        
-        # Create a marker file to track the last full refresh
-        last_refresh_file = Path(".last_command_refresh")
-        skip_registration = False
-        
-        # First check if our commands are already registered correctly
-        # Get all the currently known commands
-        all_current_commands = [cmd.name for cmd in bot.application_commands]
-        desired_commands = ["server", "stats", "connections", "killfeed", "missions", "faction", "ping", "commands"]
-        missing_commands = [cmd for cmd in desired_commands if cmd not in all_current_commands]
-        
-        if not missing_commands:
-            logger.info("All expected commands are already locally registered. Checking registration age...")
-        else:
-            logger.warning(f"Missing {len(missing_commands)}/{len(desired_commands)} commands: {', '.join(missing_commands)}")
-        
-        # Check timestamp of last registration
-        if last_refresh_file.exists():
-            try:
-                # Read the timestamp from file
-                with open(last_refresh_file, "r") as f:
-                    last_refresh = float(f.read().strip())
-                
-                # Check if we've registered commands recently (within last 60 minutes)
-                current_time = time.time()
-                time_since_refresh = current_time - last_refresh
-                refresh_threshold = 3600  # 60 minutes in seconds
-                
-                if time_since_refresh < refresh_threshold and not missing_commands:
-                    # If no commands are missing and registration was recent, skip
-                    logger.info(f"Last command refresh was {time_since_refresh:.2f}s ago (<60 minutes) and all commands are registered.")
-                    logger.info(f"Skipping registration to prevent rate limits.")
-                    skip_registration = True
-                elif time_since_refresh < 300 and missing_commands:  # 5 minutes
-                    # If registration was very recent but commands are missing, wait longer
-                    logger.warning(f"Registration was attempted just {time_since_refresh:.2f}s ago but commands are still missing.")
-                    logger.warning(f"Waiting for Discord API to propagate changes (can take up to an hour).")
-                    skip_registration = True
-                else:
-                    if missing_commands:
-                        logger.info(f"Missing commands and refresh age is {time_since_refresh:.2f}s. Proceeding with registration.")
-                    else:
-                        logger.info(f"All commands present but refresh age is {time_since_refresh:.2f}s (>60 minutes). Refreshing registration.")
-            except Exception as e:
-                logger.error(f"Error reading last refresh timestamp: {e}")
-        else:
-            logger.info("No previous command registration record found. Registering commands for the first time.")
-        
-        # Register slash commands to Discord only if not skipping
-        if not skip_registration:
-            await sync_slash_commands()
-            
-            # Update the timestamp after registration
-            with open(last_refresh_file, "w") as f:
-                f.write(str(time.time()))
-        else:
-            logger.info("Command registration skipped due to recent successful registration.")
-            logger.info("Commands should already be registered with Discord.")
+            logger.warning("⚠️ Command sync was not fully successful")
+            logger.info("Commands will continue to be registered in the background")
     except Exception as e:
         logger.error(f"Error during command registration: {e}")
         logger.error("Continuing with bot startup despite command registration error")

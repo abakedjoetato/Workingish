@@ -1,3 +1,1 @@
-# Utils package initialization
-# This package contains utility functions for the bot
-
+# This file is required for proper utility imports

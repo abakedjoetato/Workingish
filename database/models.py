@@ -3,6 +3,74 @@ import logging
 
 logger = logging.getLogger('deadside_bot.database.models')
 
+class AuthCredentials:
+    """Model for server authentication credentials"""
+    collection_name = "auth_credentials"
+    
+    def __init__(self, server_id, username, password=None, key_path=None, _id=None):
+        self.server_id = server_id
+        self.username = username
+        self.password = password
+        self.key_path = key_path
+        self.created_at = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+        self._id = _id
+    
+    @classmethod
+    async def get_for_server(cls, db, server_id):
+        """Get credentials for a specific server"""
+        collection = await db.get_collection(cls.collection_name)
+        data = await collection.find_one({"server_id": server_id})
+        if data:
+            # Use MongoDB's _id
+            id_value = data.get("_id")
+            if id_value:
+                return cls(**{**data, "_id": id_value})
+        return None
+    
+    @classmethod
+    async def set_credentials(cls, db, server_id, username, password=None, key_path=None):
+        """Create or update credentials for a server"""
+        collection = await db.get_collection(cls.collection_name)
+        
+        # Check if credentials already exist
+        existing = await cls.get_for_server(db, server_id)
+        
+        if existing:
+            # Update existing credentials
+            updates = {
+                "username": username,
+                "updated_at": datetime.utcnow()
+            }
+            
+            if password is not None:
+                updates["password"] = password
+            
+            if key_path is not None:
+                updates["key_path"] = key_path
+                
+            await collection.update_one(
+                {"server_id": server_id},
+                {"$set": updates}
+            )
+            return True
+        else:
+            # Create new credentials
+            creds = cls(
+                server_id=server_id,
+                username=username,
+                password=password,
+                key_path=key_path
+            )
+            await collection.insert_one(creds.to_dict())
+            return True
+    
+    def to_dict(self):
+        """Convert instance to dictionary for database storage"""
+        result = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        return result
+
+
 class Server:
     """Model for game server configuration"""
     collection_name = "servers"

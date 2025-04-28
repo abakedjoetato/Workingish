@@ -7,143 +7,191 @@ This script verifies that all Discord command fixes have been properly applied:
 3. Confirms command registration is happening correctly
 """
 
-import asyncio
-import logging
-import os
 import sys
-import time
-import inspect
-import importlib.util
+import os
+import logging
 from pathlib import Path
+import importlib.util
 
-# Configure logging
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
 )
-logger = logging.getLogger("verify_commands")
+logger = logging.getLogger("command_verify")
 
 def check_cog_get_commands():
     """Check if all cogs have get_commands() method"""
-    logger.info("Checking all cogs for get_commands() method...")
+    logger.info("Checking cogs for get_commands() method...")
     
-    # Find all cogs
-    cog_dir = Path('cogs')
-    if not cog_dir.exists():
-        logger.error("Cogs directory not found!")
-        return False
+    cog_dir = Path("cogs")
+    required_cogs = [
+        'server_commands_slash.py',
+        'stats_commands.py',
+        'killfeed_commands.py',
+        'connection_commands.py',
+        'mission_commands.py',
+        'faction_commands.py',
+        'admin_commands.py'
+    ]
     
-    cog_files = [f for f in cog_dir.glob('*.py') if f.name != '__init__.py']
+    # Track results
+    valid_cogs = 0
+    invalid_cogs = 0
+    missing_cogs = 0
     
-    if not cog_files:
-        logger.error("No cog files found!")
-        return False
-    
-    all_valid = True
-    
-    for cog_file in cog_files:
-        # Skip __init__.py
-        if cog_file.name == '__init__.py':
-            continue
+    # Check each required cog
+    for cog_file in required_cogs:
+        file_path = cog_dir / cog_file
         
-        # Check file content for get_commands method
-        content = cog_file.read_text()
-        if 'def get_commands(self)' not in content:
-            logger.error(f"❌ {cog_file.name}: Missing get_commands() method!")
-            all_valid = False
+        if not file_path.exists():
+            logger.warning(f"❌ Cog file missing: {cog_file}")
+            missing_cogs += 1
+            continue
+            
+        # Check if the file has get_commands method
+        with open(file_path, 'r') as f:
+            content = f.read()
+            
+        if "def get_commands(self)" in content:
+            logger.info(f"✅ {cog_file}: Has get_commands() method")
+            valid_cogs += 1
         else:
-            logger.info(f"✅ {cog_file.name}: Has get_commands() method")
+            logger.error(f"❌ {cog_file}: Missing get_commands() method")
+            invalid_cogs += 1
     
-    return all_valid
+    # Summary
+    logger.info(f"Cog verification summary: {valid_cogs} valid, {invalid_cogs} invalid, {missing_cogs} missing")
+    
+    return valid_cogs == len(required_cogs)
 
 def check_sync_retry_module():
     """Check if sync_retry module exists and has necessary components"""
     logger.info("Checking sync_retry module...")
     
-    sync_retry_path = Path('utils/sync_retry.py')
+    module_path = Path("utils") / "sync_retry.py"
     
-    if not sync_retry_path.exists():
-        logger.error("❌ sync_retry module not found!")
+    if not module_path.exists():
+        logger.error("❌ sync_retry module is missing")
         return False
+        
+    # Check content
+    with open(module_path, 'r') as f:
+        content = f.read()
     
-    # Check for key functions
-    content = sync_retry_path.read_text()
-    
-    required_functions = [
-        'safe_command_sync',
-        '_register_commands_safely',
-        '_generate_minimal_commands',
-        '_handle_rate_limit'
+    # Check for key elements
+    required_elements = [
+        "safe_command_sync",
+        "CRITICAL_COMMANDS",
+        "_handle_rate_limit",
+        "_register_commands_safely",
+        "_is_recent_sync",
+        "VERSION ="
     ]
     
-    all_functions_present = True
-    for func in required_functions:
-        if func not in content:
-            logger.error(f"❌ sync_retry module missing required function: {func}")
-            all_functions_present = False
+    missing_elements = []
+    for element in required_elements:
+        if element not in content:
+            missing_elements.append(element)
+            
+    if missing_elements:
+        logger.error(f"❌ sync_retry module is missing required elements: {', '.join(missing_elements)}")
+        return False
+        
+    # Try to get version
+    version_line = [line for line in content.splitlines() if "VERSION =" in line]
+    if version_line:
+        try:
+            version = float(version_line[0].split("=")[1].strip())
+            logger.info(f"✅ sync_retry module version: {version}")
+            
+            if version < 1.0:
+                logger.warning(f"⚠️ sync_retry module version ({version}) may be outdated")
+        except (ValueError, IndexError):
+            logger.warning("⚠️ Could not parse sync_retry module version")
     
-    if all_functions_present:
-        logger.info("✅ sync_retry module has all required functions")
-    
-    return all_functions_present
+    logger.info("✅ sync_retry module exists and contains required elements")
+    return True
 
 def check_sync_file():
     """Check if .last_command_sync file exists with valid timestamp"""
-    logger.info("Checking .last_command_sync file...")
+    logger.info("Checking command sync state...")
     
-    sync_file = Path('.last_command_sync')
+    sync_file = Path(".last_command_sync")
     
     if not sync_file.exists():
-        logger.warning("⚠️ .last_command_sync file not found - bot will register commands on next restart")
-        return True
+        logger.warning("⚠️ No command sync timestamp found (.last_command_sync)")
+        logger.info("This is normal if commands haven't been registered yet")
+        return False
     
+    # Try to read the timestamp
     try:
         with open(sync_file, 'r') as f:
             timestamp = float(f.read().strip())
+            
+        import time
+        time_since = time.time() - timestamp
+        hours_since = time_since / 3600
         
-        # Check if timestamp is valid (not too old or in the future)
-        current_time = time.time()
-        time_diff = current_time - timestamp
+        logger.info(f"✅ Last command sync was {hours_since:.2f} hours ago")
         
-        if time_diff < 0:
-            logger.warning("⚠️ .last_command_sync timestamp is in the future!")
-            return False
-        
-        if time_diff > 86400 * 7:  # 7 days
-            logger.warning(f"⚠️ .last_command_sync timestamp is old: {time_diff / 86400:.1f} days")
-        else:
-            logger.info(f"✅ .last_command_sync timestamp is valid: {time_diff / 3600:.1f} hours ago")
-        
-        return True
+        if hours_since > 24:
+            logger.warning(f"⚠️ Command sync is more than 24 hours old")
     except Exception as e:
-        logger.error(f"❌ Error reading .last_command_sync file: {e}")
+        logger.error(f"❌ Error reading sync timestamp: {e}")
         return False
+    
+    return True
 
 def main():
     """Run all verification checks"""
-    logger.info("Starting command fix verification")
+    logger.info("Starting command fix verification...")
     
-    # Run all checks
-    cogs_ok = check_cog_get_commands()
-    sync_module_ok = check_sync_retry_module()
-    sync_file_ok = check_sync_file()
+    # Track overall status
+    status = True
     
-    # Summarize results
-    logger.info("\n--- Verification Results ---")
-    logger.info(f"Cogs with get_commands(): {'✅ PASS' if cogs_ok else '❌ FAIL'}")
-    logger.info(f"sync_retry module: {'✅ PASS' if sync_module_ok else '❌ FAIL'}")
-    logger.info(f"Command sync state: {'✅ PASS' if sync_file_ok else '❌ FAIL'}")
+    # Check 1: Cogs have get_commands() methods
+    if not check_cog_get_commands():
+        logger.error("❌ Some cogs are missing get_commands() methods")
+        logger.info("Run fix_all_commands.py to fix this issue")
+        status = False
     
-    # Final assessment
-    if cogs_ok and sync_module_ok and sync_file_ok:
-        logger.info("\n✅ ALL CHECKS PASSED! Command fixes have been successfully applied.")
-        logger.info("The bot should correctly register all commands with Discord.")
-        logger.info("Note: Due to Discord's rate limits, it may take up to an hour for all commands to appear.")
-        return True
+    # Check 2: sync_retry module is properly set up
+    if not check_sync_retry_module():
+        logger.error("❌ sync_retry module is not properly set up")
+        logger.info("Run update_utils_sync_retry() to fix this issue")
+        status = False
+    
+    # Check 3: Command sync has been performed
+    if not check_sync_file():
+        logger.warning("⚠️ No record of command sync found")
+        logger.info("This may be normal if the bot hasn't been run yet")
+        # Don't fail for this, just warn
+    
+    # Check if all implementation files exist
+    implementation_files = [
+        "command_fix_implementation.py",
+        "fix_all_commands.py",
+        "unified_command_fix.py"
+    ]
+    
+    missing_files = [f for f in implementation_files if not Path(f).exists()]
+    
+    if missing_files:
+        logger.error(f"❌ Missing implementation files: {', '.join(missing_files)}")
+        status = False
     else:
-        logger.error("\n❌ SOME CHECKS FAILED! Command fixes may not be fully applied.")
-        logger.error("Please run the unified_command_fix.py script to fix all issues.")
-        return False
+        logger.info("✅ All implementation files are present")
+    
+    # Final status
+    if status:
+        logger.info("✅ All command fixes have been properly applied!")
+        logger.info("The bot should now register commands correctly with Discord")
+    else:
+        logger.error("❌ Some command fixes have not been properly applied")
+        logger.info("Run unified_command_fix.py to fix all issues")
+    
+    return status
 
 if __name__ == "__main__":
     success = main()
