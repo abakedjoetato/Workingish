@@ -8,6 +8,13 @@ from utils.embeds import create_connection_embed
 
 logger = logging.getLogger('deadside_bot.cogs.connection')
 
+# Create slash command group
+connection_group = discord.SlashCommandGroup(
+    name="connections",
+    description="Commands for managing connection notifications",
+    default_member_permissions=discord.Permissions(manage_channels=True)
+)
+
 class ConnectionCommands(commands.Cog):
     """Commands for managing connection notifications"""
     
@@ -15,6 +22,8 @@ class ConnectionCommands(commands.Cog):
         self.bot = bot
         self.db = getattr(bot, 'db', None)  # Get db from bot if available
         self.server_trackers = {}
+        # Add the connection command group to this cog
+        self.connection_group = connection_group
         # We'll initialize trackers after the cog is fully loaded, not during __init__
         
     async def cog_load(self):
@@ -64,19 +73,13 @@ class ConnectionCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error initializing connection trackers: {e}")
     
-    @commands.group(name="connections", aliases=["connection"], invoke_without_command=True)
-    @commands.has_permissions(manage_channels=True)
-    async def connections(self, ctx):
-        """Commands for managing connection notifications"""
-        await ctx.send("Available commands: `channel`, `disable`")
-    
-    @connections.command(name="channel")
-    @commands.has_permissions(manage_channels=True)
-    async def set_channel(self, ctx, channel: discord.TextChannel = None):
+    @connection_group.command(name="channel", description="Set the channel for connection notifications")
+    async def set_channel(self, ctx, 
+                         channel: discord.Option(discord.TextChannel, "Channel to send notifications to", required=False) = None):
         """
         Set the channel for connection notifications
         
-        Usage: !connections channel [#channel]
+        Usage: /connections channel [#channel]
         
         If no channel is provided, the current channel will be used.
         """
@@ -84,7 +87,7 @@ class ConnectionCommands(commands.Cog):
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in set_channel command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Use current channel if none specified
@@ -115,21 +118,20 @@ class ConnectionCommands(commands.Cog):
                         name=f"connection_tracker_{server._id}"
                     )
             
-            await ctx.send(f"✅ Connection notifications will now be sent to {channel.mention}")
+            await ctx.respond(f"✅ Connection notifications will now be sent to {channel.mention}")
                 
         except Exception as e:
             logger.error(f"Error setting connection channel: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
-    @connections.command(name="disable")
-    @commands.has_permissions(manage_channels=True)
+    @connection_group.command(name="disable", description="Disable connection notifications for this guild")
     async def disable_connections(self, ctx):
         """Disable connection notifications for this guild"""
         try:
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in disable_connections command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Update guild config
@@ -144,18 +146,20 @@ class ConnectionCommands(commands.Cog):
                 if str(server._id) in self.server_trackers:
                     del self.server_trackers[str(server._id)]
             
-            await ctx.send("✅ Connection notifications have been disabled.")
+            await ctx.respond("✅ Connection notifications have been disabled.")
                 
         except Exception as e:
             logger.error(f"Error disabling connections: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
-    @connections.command(name="list")
-    async def list_connections(self, ctx, *, server_name: str = None, limit: int = 10):
+    @connection_group.command(name="list", description="List recent player connections for a server")
+    async def list_connections(self, ctx, 
+                               server_name: discord.Option(str, "Server name to show connections for", required=False) = None,
+                               limit: discord.Option(int, "Number of connections to show (max: 20)", min_value=1, max_value=20, required=False) = 10):
         """
         List recent player connections for a server
         
-        Usage: !connections list [server_name] [limit]
+        Usage: /connections list [server_name] [limit]
         
         If no server name is provided, connections for all servers will be shown.
         Default limit is 10, max limit is 20.
@@ -164,7 +168,7 @@ class ConnectionCommands(commands.Cog):
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in list_connections command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Limit the number of connections
@@ -177,7 +181,7 @@ class ConnectionCommands(commands.Cog):
                 server = next((s for s in servers if s.name.lower() == server_name.lower()), None)
                 
                 if not server:
-                    await ctx.send(f"⚠️ Server '{server_name}' not found. Use `!server list` to see all configured servers.")
+                    await ctx.respond(f"⚠️ Server '{server_name}' not found. Use `/server list` to see all configured servers.")
                     return
                 
                 # Get recent connections
@@ -210,14 +214,21 @@ class ConnectionCommands(commands.Cog):
                             inline=True
                         )
                 
-                await ctx.send(embed=embed)
+                await ctx.respond(embed=embed)
             else:
                 # Get connections for all servers
                 servers = await Server.get_by_guild(self.db, ctx.guild.id)
                 
                 if not servers:
-                    await ctx.send("No servers have been configured yet. Use `!server add` to add a server.")
+                    await ctx.respond("No servers have been configured yet. Use `/server add` to add a server.")
                     return
+                
+                # Create a combined embed for all servers
+                combined_embed = discord.Embed(
+                    title="Recent Connections for All Servers",
+                    description=f"Last {limit} connection events per server",
+                    color=discord.Color.blue()
+                )
                 
                 # Get recent connections for each server
                 for server in servers:
@@ -225,36 +236,34 @@ class ConnectionCommands(commands.Cog):
                     cursor = collection.find({"server_id": server._id})
                     connections = await cursor.to_list(limit)
                     
-                    # Create embed
-                    embed = discord.Embed(
-                        title=f"Recent Connections for {server.name}",
-                        description=f"Last {len(connections)} connection events",
-                        color=discord.Color.blue()
-                    )
-                    
-                    for conn in connections:
-                        event_type = conn["event_type"].capitalize()
-                        timestamp = conn["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                        player_name = conn["player_name"]
+                    if connections:
+                        combined_embed.add_field(
+                            name=f"📊 {server.name} ({len(connections)} events)",
+                            value="Server connection events",
+                            inline=False
+                        )
                         
-                        if conn["event_type"] == "kick":
-                            embed.add_field(
+                        for conn in connections:
+                            event_type = conn["event_type"].capitalize()
+                            timestamp = conn["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                            player_name = conn["player_name"]
+                            
+                            if conn["event_type"] == "kick":
+                                field_value = f"Time: {timestamp}\nReason: {conn.get('reason', 'Unknown')}"
+                            else:
+                                field_value = f"Time: {timestamp}"
+                                
+                            combined_embed.add_field(
                                 name=f"{event_type}: {player_name}",
-                                value=f"Time: {timestamp}\nReason: {conn.get('reason', 'Unknown')}",
-                                inline=False
-                            )
-                        else:
-                            embed.add_field(
-                                name=f"{event_type}: {player_name}",
-                                value=f"Time: {timestamp}",
+                                value=field_value,
                                 inline=True
                             )
-                    
-                    await ctx.send(embed=embed)
+                
+                await ctx.respond(embed=combined_embed)
                 
         except Exception as e:
             logger.error(f"Error listing connections: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     async def track_server_connections(self, server_id, channel_id):
         """
@@ -364,3 +373,7 @@ class ConnectionCommands(commands.Cog):
             return
         except Exception as e:
             logger.error(f"Fatal error in connection tracker for server {server_id}: {e}")
+
+def setup(bot):
+    """Add the cog to the bot directly when loaded via extension"""
+    bot.add_cog(ConnectionCommands(bot))

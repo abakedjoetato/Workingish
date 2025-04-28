@@ -18,21 +18,33 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger('deadside_bot.cogs.admin')
 
+# Define the slash command group outside the class first
+admin_group = discord.SlashCommandGroup(
+    name="admin",
+    description="Administrative commands for bot management",
+    default_member_permissions=discord.Permissions(administrator=True)
+)
+
 class AdminCommands(commands.Cog):
     """Administrative commands for bot management"""
     
     def __init__(self, bot):
         self.bot = bot
         self.db = getattr(bot, 'db', None)  # Get db from bot if available
+        
+    async def cog_load(self):
+        """Called when the cog is loaded. Safe to use async code here."""
+        logger.info("AdminCommands cog loaded")
+        # Ensure db is set before attempting any database operations
+        if not self.db and hasattr(self.bot, 'db'):
+            self.db = self.bot.db
+            logger.debug("Set database for AdminCommands cog from bot")
     
-    @commands.group(name="admin", invoke_without_command=True)
-    @commands.has_permissions(administrator=True)
-    async def admin(self, ctx):
-        """Admin commands for bot management (requires Administrator permission)"""
-        await ctx.send("Available commands: `stats`, `premium`, `features`, `link`, `unlink`, `cleanup`, `purge`, `home`")
+    # This function is needed to expose the commands to the bot
+    def get_commands(self):
+        return [admin_group]
     
-    @admin.command(name="stats")
-    @commands.has_permissions(administrator=True)
+    @admin_group.command(name="stats", description="View bot statistics and performance metrics")
     async def show_stats(self, ctx):
         """View bot statistics and performance metrics"""
         try:
@@ -149,9 +161,10 @@ class AdminCommands(commands.Cog):
             logger.error(f"Error getting bot stats: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
     
-    @admin.command(name="premium")
-    @commands.has_permissions(administrator=True)
-    async def set_premium(self, ctx, guild_id: int = None, tier: str = None):
+    @admin_group.command(name="premium", description="View or set the premium tier for a guild")
+    async def set_premium(self, ctx, 
+                         guild_id: discord.Option(int, "Guild ID to set premium for", required=False) = None, 
+                         tier: discord.Option(str, "Tier to set (survivor, warlord, overseer)", required=False) = None):
         """
         View or set the premium tier for a guild
         
@@ -169,7 +182,7 @@ class AdminCommands(commands.Cog):
             # Only home guild admins can set premium tiers for other guilds
             if guild_id is not None and guild_id != ctx.guild.id:
                 if not await is_home_guild_admin(ctx):
-                    await ctx.send("⚠️ Only home guild administrators can set premium tiers for other guilds.")
+                    await ctx.respond("⚠️ Only home guild administrators can set premium tiers for other guilds.")
                     return
             
             # If no guild_id provided, use current guild
@@ -179,7 +192,7 @@ class AdminCommands(commands.Cog):
             # If this is the home guild, always show overseer tier
             if await db.is_home_guild(guild_id):
                 if tier is not None:
-                    await ctx.send("⚠️ Home guild always has Overseer tier and cannot be changed.")
+                    await ctx.respond("⚠️ Home guild always has Overseer tier and cannot be changed.")
                     return
                 
                 # Show home guild tier info
@@ -197,7 +210,7 @@ class AdminCommands(commands.Cog):
                                    value=str(value) if value is not None else "Unlimited", 
                                    inline=True)
                 
-                await ctx.send(embed=embed)
+                await ctx.respond(embed=embed)
                 return
             
             # If no tier is provided, show current tier
@@ -217,12 +230,12 @@ class AdminCommands(commands.Cog):
                                    value=str(value) if value is not None else "Unlimited", 
                                    inline=True)
                 
-                await ctx.send(embed=embed)
+                await ctx.respond(embed=embed)
                 return
             
             # Set new tier (only if in home guild with admin permissions)
             if not await is_home_guild_admin(ctx):
-                await ctx.send("⚠️ Only administrators in the home guild can change premium tiers.")
+                await ctx.respond("⚠️ Only administrators in the home guild can change premium tiers.")
                 return
             
             # Validate and set the tier
@@ -231,15 +244,16 @@ class AdminCommands(commands.Cog):
                 # If successful, the set_premium_tier function will already send a confirmation message
                 pass
             else:
-                await ctx.send(f"⚠️ Failed to set premium tier '{tier}' for guild {guild_id}")
+                await ctx.respond(f"⚠️ Failed to set premium tier '{tier}' for guild {guild_id}")
                 
         except Exception as e:
             logger.error(f"Error in premium command: {e}")
-            await ctx.send(f"Error updating premium tier: {e}")
+            await ctx.respond(f"Error updating premium tier: {e}")
     
-    @admin.command(name="link")
-    @commands.has_permissions(administrator=True)
-    async def link_player(self, ctx, member: discord.Member, *, player_name: str):
+    @admin_group.command(name="link", description="Link a Discord member to a game player")
+    async def link_player(self, ctx, 
+                         member: discord.Option(discord.Member, "Discord member to link", required=True),
+                         player_name: discord.Option(str, "Player name to link to the member", required=True)):
         """
         Link a Discord member to a game player
         
@@ -258,7 +272,7 @@ class AdminCommands(commands.Cog):
             players = await cursor.to_list(None)
             
             if not players:
-                await ctx.send(f"⚠️ Player '{player_name}' not found. Names are case-sensitive.")
+                await ctx.respond(f"⚠️ Player '{player_name}' not found. Names are case-sensitive.")
                 return
             
             # Update player with Discord ID
@@ -266,7 +280,7 @@ class AdminCommands(commands.Cog):
             player.discord_id = str(member.id)
             await player.update(db)
             
-            await ctx.send(f"✅ Linked player '{player.player_name}' to Discord user {member.mention}")
+            await ctx.respond(f"✅ Linked player '{player.player_name}' to Discord user {member.mention}")
             
             # Send DM to user
             try:
@@ -278,11 +292,12 @@ class AdminCommands(commands.Cog):
         
         except Exception as e:
             logger.error(f"Error linking player: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
-    @admin.command(name="unlink")
-    @commands.has_permissions(administrator=True)
-    async def unlink_player(self, ctx, member: discord.Member, *, player_name: str = None):
+    @admin_group.command(name="unlink", description="Unlink a Discord member from a game player")
+    async def unlink_player(self, ctx, 
+                           member: discord.Option(discord.Member, "Discord member to unlink", required=True),
+                           player_name: discord.Option(str, "Player name to unlink (leave empty to unlink all)", required=False) = None):
         """
         Unlink a Discord member from a game player
         
@@ -304,7 +319,7 @@ class AdminCommands(commands.Cog):
                 players = await cursor.to_list(None)
                 
                 if not players:
-                    await ctx.send(f"⚠️ Player '{player_name}' not found or not linked to {member.mention}.")
+                    await ctx.respond(f"⚠️ Player '{player_name}' not found or not linked to {member.mention}.")
                     return
                 
                 # Update player to remove Discord ID
@@ -312,7 +327,7 @@ class AdminCommands(commands.Cog):
                 player.discord_id = None
                 await player.update(db)
                 
-                await ctx.send(f"✅ Unlinked player '{player.player_name}' from Discord user {member.mention}")
+                await ctx.respond(f"✅ Unlinked player '{player.player_name}' from Discord user {member.mention}")
             else:
                 # Remove all links for this user
                 collection = await db.get_collection("players")
@@ -327,9 +342,11 @@ class AdminCommands(commands.Cog):
             logger.error(f"Error unlinking player: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
     
-    @admin.command(name="cleanup")
-    @commands.has_permissions(administrator=True)
-    async def cleanup_data(self, ctx, data_type: str = "parsers", days: int = 30):
+    @admin_group.command(name="cleanup", description="Clean up old data from the database")
+    async def cleanup_data(self, ctx, 
+                          data_type: discord.Option(str, "Type of data to clean (parsers, connections, kills)", 
+                                                   choices=["parsers", "connections", "kills"], required=False) = "parsers",
+                          days: discord.Option(int, "Age of data to remove (in days)", min_value=1, required=False) = 30):
         """
         Clean up old data from the database
         
@@ -382,9 +399,9 @@ class AdminCommands(commands.Cog):
             logger.error(f"Error cleaning up data: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
     
-    @admin.command(name="home")
-    @commands.check(is_bot_owner)
-    async def set_home_guild_command(self, ctx, guild_id: int = None):
+    @admin_group.command(name="home", description="Set or view the home guild (bot owner only)")
+    async def set_home_guild_command(self, ctx, 
+                                    guild_id: discord.Option(int, "Guild ID to set as home", required=False) = None):
         """
         Set or view the home guild
         
@@ -425,8 +442,7 @@ class AdminCommands(commands.Cog):
             logger.error(f"Error in home guild command: {e}")
             await ctx.send(f"Error setting home guild: {e}")
     
-    @admin.command(name="purge")
-    @commands.has_permissions(administrator=True)
+    @admin_group.command(name="purge", description="Purge all data for this guild (requires confirmation)")
     async def purge_guild_data(self, ctx):
         """
         Purge all data for this guild (requires confirmation)
@@ -488,8 +504,7 @@ class AdminCommands(commands.Cog):
             logger.error(f"Error purging guild data: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
             
-    @admin.command(name="features")
-    @commands.has_permissions(administrator=True)
+    @admin_group.command(name="features", description="Display all available features by premium tier")
     async def show_features(self, ctx):
         """
         Display all available features by premium tier
@@ -586,3 +601,7 @@ class AdminCommands(commands.Cog):
         else:
             return str(value)
 
+def setup(bot):
+    """Add the cog to the bot directly when loaded via extension"""
+    bot.add_application_command(admin_group)
+    bot.add_cog(AdminCommands(bot))

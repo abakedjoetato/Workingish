@@ -8,6 +8,13 @@ from utils.embeds import create_killfeed_embed
 
 logger = logging.getLogger('deadside_bot.cogs.killfeed')
 
+# Create slash command group for killfeed commands
+killfeed_group = discord.SlashCommandGroup(
+    name="killfeed",
+    description="Commands for managing killfeed notifications",
+    default_member_permissions=discord.Permissions(manage_channels=True)
+)
+
 class KillfeedCommands(commands.Cog):
     """Commands for managing killfeed notifications"""
     
@@ -15,6 +22,8 @@ class KillfeedCommands(commands.Cog):
         self.bot = bot
         self.db = getattr(bot, 'db', None)  # Get db from bot if available
         self.server_trackers = {}
+        # Add the killfeed command group to this cog
+        self.killfeed_group = killfeed_group
         # We'll initialize trackers after the cog is fully loaded, not during __init__
         
     async def cog_load(self):
@@ -64,19 +73,13 @@ class KillfeedCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error initializing killfeed trackers: {e}")
     
-    @commands.group(name="killfeed", invoke_without_command=True)
-    @commands.has_permissions(manage_channels=True)
-    async def killfeed(self, ctx):
-        """Commands for managing killfeed notifications"""
-        await ctx.send("Available commands: `channel`, `disable`")
-    
-    @killfeed.command(name="channel")
-    @commands.has_permissions(manage_channels=True)
-    async def set_channel(self, ctx, channel: discord.TextChannel = None):
+    @killfeed_group.command(name="channel", description="Set the channel for killfeed notifications")
+    async def set_channel(self, ctx, 
+                        channel: discord.Option(discord.TextChannel, "Channel to send notifications to", required=False) = None):
         """
         Set the channel for killfeed notifications
         
-        Usage: !killfeed channel [#channel]
+        Usage: /killfeed channel [#channel]
         
         If no channel is provided, the current channel will be used.
         """
@@ -84,7 +87,7 @@ class KillfeedCommands(commands.Cog):
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in set_channel command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Use current channel if none specified
@@ -115,21 +118,20 @@ class KillfeedCommands(commands.Cog):
                         name=f"killfeed_tracker_{server._id}"
                     )
             
-            await ctx.send(f"✅ Killfeed notifications will now be sent to {channel.mention}")
+            await ctx.respond(f"✅ Killfeed notifications will now be sent to {channel.mention}")
                 
         except Exception as e:
             logger.error(f"Error setting killfeed channel: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
-    @killfeed.command(name="disable")
-    @commands.has_permissions(manage_channels=True)
+    @killfeed_group.command(name="disable", description="Disable killfeed notifications for this guild")
     async def disable_killfeed(self, ctx):
         """Disable killfeed notifications for this guild"""
         try:
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in disable_killfeed command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Update guild config
@@ -144,11 +146,11 @@ class KillfeedCommands(commands.Cog):
                 if str(server._id) in self.server_trackers:
                     del self.server_trackers[str(server._id)]
             
-            await ctx.send("✅ Killfeed notifications have been disabled.")
+            await ctx.respond("✅ Killfeed notifications have been disabled.")
                 
         except Exception as e:
             logger.error(f"Error disabling killfeed: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     async def track_server_kills(self, server_id, channel_id):
         """
@@ -259,3 +261,7 @@ class KillfeedCommands(commands.Cog):
             return
         except Exception as e:
             logger.error(f"Fatal error in killfeed tracker for server {server_id}: {e}")
+            
+def setup(bot):
+    """Add the cog to the bot directly when loaded via extension"""
+    bot.add_cog(KillfeedCommands(bot))

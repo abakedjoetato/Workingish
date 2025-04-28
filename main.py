@@ -7,8 +7,8 @@ from config import TOKEN, PREFIX, LOGGING_LEVEL
 from database.connection import Database
 from cogs.server_commands_slash import ServerCommands, server_group
 from cogs.stats_commands import StatsCommands
-from cogs.killfeed_commands import KillfeedCommands
-from cogs.connection_commands import ConnectionCommands
+from cogs.killfeed_commands import KillfeedCommands, killfeed_group
+from cogs.connection_commands import ConnectionCommands, connection_group
 from cogs.mission_commands import MissionCommands
 from cogs.admin_commands import AdminCommands
 from cogs.faction_commands import FactionCommands
@@ -140,12 +140,21 @@ async def on_ready():
     # Load cogs after database is established
     await load_cogs()
     
-    # Manually add the server command group
+    # Manually add command groups
     try:
+        # Add server command group
         bot.add_application_command(server_group)
         logger.info(f"Successfully registered server command group")
+        
+        # Add connection command group
+        bot.add_application_command(connection_group)
+        logger.info(f"Successfully registered connections command group")
+        
+        # Add killfeed command group
+        bot.add_application_command(killfeed_group)
+        logger.info(f"Successfully registered killfeed command group")
     except Exception as e:
-        logger.error(f"Failed to register server group: {e}")
+        logger.error(f"Failed to register command groups: {e}")
     
     # Sync slash commands with Discord - MUST happen after cogs are loaded
     await sync_slash_commands()

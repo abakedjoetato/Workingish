@@ -8,24 +8,38 @@ from bson import ObjectId
 
 logger = logging.getLogger('deadside_bot.cogs.stats')
 
+# Define the slash command group outside the class first
+stats_group = discord.SlashCommandGroup(
+    name="stats",
+    description="Commands for viewing player and server statistics"
+)
+
 class StatsCommands(commands.Cog):
     """Commands for viewing player and server statistics"""
     
     def __init__(self, bot):
         self.bot = bot
         self.db = getattr(bot, 'db', None)  # Get db from bot if available
+        
+    async def cog_load(self):
+        """Called when the cog is loaded. Safe to use async code here."""
+        logger.info("StatsCommands cog loaded")
+        # Ensure db is set before attempting any database operations
+        if not self.db and hasattr(self.bot, 'db'):
+            self.db = self.bot.db
+            logger.debug("Set database for StatsCommands cog from bot")
     
-    @commands.group(name="stats", invoke_without_command=True)
-    async def stats(self, ctx):
-        """View statistics commands. Use !stats player or !stats server"""
-        await ctx.send("Available commands: `player`, `server`, `leaderboard`, `weapons`, `me`")
+    # This function is needed to expose the commands to the bot
+    def get_commands(self):
+        return [stats_group]
     
-    @stats.command(name="player")
-    async def player_stats(self, ctx, *, player_name: str):
+    @stats_group.command(name="player", description="View statistics for a specific player")
+    async def player_stats(self, ctx, 
+                          player_name: discord.Option(str, "The player name to look up", required=True)):
         """
         View statistics for a specific player
         
-        Usage: !stats player <player_name>
+        Usage: /stats player <player_name>
         """
         try:
             db = await Database.get_instance()
@@ -38,7 +52,7 @@ class StatsCommands(commands.Cog):
             players = await cursor.to_list(None)
             
             if not players:
-                await ctx.send(f"⚠️ Player '{player_name}' not found. Names are case-sensitive.")
+                await ctx.respond(f"⚠️ Player '{player_name}' not found. Names are case-sensitive.")
                 return
             
             # Process each matching player
@@ -56,7 +70,7 @@ class StatsCommands(commands.Cog):
             logger.error(f"Error getting player stats: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
     
-    @stats.command(name="me")
+    @stats_group.command(name="me", description="View your own statistics if linked to a player")
     async def my_stats(self, ctx):
         """View your own statistics (if your Discord account is linked to a player)"""
         try:
@@ -82,12 +96,13 @@ class StatsCommands(commands.Cog):
             logger.error(f"Error getting self stats: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
     
-    @stats.command(name="server")
-    async def server_stats(self, ctx, *, server_name: str = None):
+    @stats_group.command(name="server", description="View statistics for a server")
+    async def server_stats(self, ctx, 
+                          server_name: discord.Option(str, "Server name to view stats for", required=False) = None):
         """
         View statistics for a server
         
-        Usage: !stats server [server_name]
+        Usage: /stats server [server_name]
         
         If no server name is provided, stats for all servers will be shown.
         """
@@ -130,12 +145,14 @@ class StatsCommands(commands.Cog):
             logger.error(f"Error getting server stats: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
     
-    @stats.command(name="leaderboard")
-    async def leaderboard(self, ctx, stat_type: str = "kills", limit: int = 10):
+    @stats_group.command(name="leaderboard", description="View the leaderboard for a specific stat")
+    async def leaderboard(self, ctx, 
+                         stat_type: discord.Option(str, "Stat type to show (kills, deaths, kd)", required=False, choices=["kills", "deaths", "kd"]) = "kills",
+                         limit: discord.Option(int, "Number of players to show (max: 25)", required=False, min_value=1, max_value=25) = 10):
         """
         View the leaderboard for a specific stat
         
-        Usage: !stats leaderboard [stat_type] [limit]
+        Usage: /stats leaderboard [stat_type] [limit]
         
         stat_type: kills, deaths, kd (default: kills)
         limit: Number of players to show (default: 10, max: 25)
@@ -253,12 +270,13 @@ class StatsCommands(commands.Cog):
             logger.error(f"Error getting leaderboard: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
     
-    @stats.command(name="weapons")
-    async def weapon_stats(self, ctx, *, player_name: str = None):
+    @stats_group.command(name="weapons", description="View weapon usage statistics")
+    async def weapon_stats(self, ctx, 
+                          player_name: discord.Option(str, "Player name to show weapon stats for", required=False) = None):
         """
         View weapon usage statistics
         
-        Usage: !stats weapons [player_name]
+        Usage: /stats weapons [player_name]
         
         If a player name is provided, shows weapon stats for that player.
         Otherwise, shows overall weapon stats across all players.
@@ -624,3 +642,8 @@ class StatsCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error getting server stats: {e}")
             return stats
+
+def setup(bot):
+    """Add the cog to the bot directly when loaded via extension"""
+    bot.add_application_command(stats_group)
+    bot.add_cog(StatsCommands(bot))

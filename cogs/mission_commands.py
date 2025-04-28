@@ -8,6 +8,13 @@ from utils.embeds import create_mission_embed
 
 logger = logging.getLogger('deadside_bot.cogs.mission')
 
+# Create slash command group for mission commands
+mission_group = discord.SlashCommandGroup(
+    name="missions",
+    description="Commands for managing mission and server event notifications",
+    default_member_permissions=discord.Permissions(manage_channels=True)
+)
+
 class MissionCommands(commands.Cog):
     """Commands for managing mission and server event notifications"""
     
@@ -61,19 +68,13 @@ class MissionCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error initializing mission trackers: {e}")
     
-    @commands.group(name="missions", aliases=["mission", "events"], invoke_without_command=True)
-    @commands.has_permissions(manage_channels=True)
-    async def missions(self, ctx):
-        """Commands for managing mission and server event notifications"""
-        await ctx.send("Available commands: `channel`, `disable`, `list`")
-    
-    @missions.command(name="channel")
-    @commands.has_permissions(manage_channels=True)
-    async def set_channel(self, ctx, channel: discord.TextChannel = None):
+    @mission_group.command(name="channel", description="Set the channel for mission notifications")
+    async def set_channel(self, ctx, 
+                      channel: discord.Option(discord.TextChannel, "Channel to send notifications to", required=False) = None):
         """
         Set the channel for mission notifications
         
-        Usage: !missions channel [#channel]
+        Usage: /missions channel [#channel]
         
         If no channel is provided, the current channel will be used.
         """
@@ -81,7 +82,7 @@ class MissionCommands(commands.Cog):
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in set_channel command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Use current channel if none specified
@@ -112,21 +113,20 @@ class MissionCommands(commands.Cog):
                         name=f"mission_tracker_{server._id}"
                     )
             
-            await ctx.send(f"✅ Mission and event notifications will now be sent to {channel.mention}")
+            await ctx.respond(f"✅ Mission and event notifications will now be sent to {channel.mention}")
                 
         except Exception as e:
             logger.error(f"Error setting mission channel: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
-    @missions.command(name="disable")
-    @commands.has_permissions(manage_channels=True)
+    @mission_group.command(name="disable", description="Disable mission notifications for this guild")
     async def disable_missions(self, ctx):
         """Disable mission notifications for this guild"""
         try:
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in disable_missions command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Update guild config
@@ -141,18 +141,23 @@ class MissionCommands(commands.Cog):
                 if str(server._id) in self.server_trackers:
                     del self.server_trackers[str(server._id)]
             
-            await ctx.send("✅ Mission and event notifications have been disabled.")
+            await ctx.respond("✅ Mission and event notifications have been disabled.")
                 
         except Exception as e:
             logger.error(f"Error disabling missions: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
-    @missions.command(name="list")
-    async def list_missions(self, ctx, *, server_name: str = None, event_type: str = None, limit: int = 10):
+    @mission_group.command(name="list", description="List recent server events")
+    async def list_missions(self, ctx, 
+                          server_name: discord.Option(str, "Server name to show events for", required=False) = None,
+                          event_type: discord.Option(str, "Type of event to filter", 
+                                                      choices=["mission", "helicrash", "airdrop", "trader", "server_start", "server_stop"], 
+                                                      required=False) = None,
+                          limit: discord.Option(int, "Number of events to show (max: 20)", min_value=1, max_value=20, required=False) = 10):
         """
         List recent server events
         
-        Usage: !missions list [server_name] [event_type] [limit]
+        Usage: /missions list [server_name] [event_type] [limit]
         
         If no server name is provided, events for all servers will be shown.
         Event types: mission, helicrash, airdrop, trader, server_start, server_stop
@@ -162,7 +167,7 @@ class MissionCommands(commands.Cog):
             # Ensure we have a database instance
             if not self.db:
                 logger.error("Database instance not available in list_missions command")
-                await ctx.send("⚠️ Database connection not available. Please try again later.")
+                await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
                 
             # Limit the number of events
@@ -172,7 +177,7 @@ class MissionCommands(commands.Cog):
             # Validate event type if provided
             valid_event_types = ["mission", "helicrash", "airdrop", "trader", "server_start", "server_stop"]
             if event_type and event_type.lower() not in valid_event_types:
-                await ctx.send(f"⚠️ Invalid event type. Valid types are: {', '.join(valid_event_types)}")
+                await ctx.respond(f"⚠️ Invalid event type. Valid types are: {', '.join(valid_event_types)}")
                 return
             
             if server_name:
@@ -181,7 +186,7 @@ class MissionCommands(commands.Cog):
                 server = next((s for s in servers if s.name.lower() == server_name.lower()), None)
                 
                 if not server:
-                    await ctx.send(f"⚠️ Server '{server_name}' not found. Use `!server list` to see all configured servers.")
+                    await ctx.respond(f"⚠️ Server '{server_name}' not found. Use `/server list` to see all configured servers.")
                     return
                 
                 # Build query
@@ -218,16 +223,22 @@ class MissionCommands(commands.Cog):
                         inline=False
                     )
                 
-                await ctx.send(embed=embed)
+                await ctx.respond(embed=embed)
             else:
                 # Get events for all servers
                 servers = await Server.get_by_guild(self.db, ctx.guild.id)
                 
                 if not servers:
-                    await ctx.send("No servers have been configured yet. Use `!server add` to add a server.")
+                    await ctx.respond("No servers have been configured yet. Use `/server add` to add a server.")
                     return
                 
-                # Process each server
+                # Create a single embed with all server events
+                embed = discord.Embed(
+                    title="Recent Events for All Servers",
+                    description=f"Last events" + (f" of type '{event_type}'" if event_type else ""),
+                    color=discord.Color.blue()
+                )
+                
                 for server in servers:
                     # Build query
                     query = {"server_id": server._id}
@@ -239,35 +250,37 @@ class MissionCommands(commands.Cog):
                     cursor = collection.find(query)
                     events = await cursor.to_list(limit)
                     
-                    # Create embed
-                    embed = discord.Embed(
-                        title=f"Recent Events for {server.name}",
-                        description=f"Last {len(events)} events" + (f" of type '{event_type}'" if event_type else ""),
-                        color=discord.Color.blue()
-                    )
-                    
-                    for event in events:
-                        event_type = event["event_type"].replace("_", " ").title()
-                        timestamp = event["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # Format details based on event type
-                        details = ""
-                        if event["event_type"] == "mission":
-                            details = f"Mission: {event['details'].get('name')}\nLevel: {event['details'].get('level')}"
-                        elif event["event_type"] in ["helicrash", "airdrop", "trader"]:
-                            details = f"Location: {event['details'].get('location')}"
-                        
+                    if events:
+                        # Add server as a header field
                         embed.add_field(
-                            name=f"{event_type} at {timestamp}",
-                            value=details if details else "No additional details",
+                            name=f"__Server: {server.name}__",
+                            value=f"Found {len(events)} events",
                             inline=False
                         )
+                        
+                        for event in events:
+                            event_type = event["event_type"].replace("_", " ").title()
+                            timestamp = event["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                            
+                            # Format details based on event type
+                            details = ""
+                            if event["event_type"] == "mission":
+                                details = f"Mission: {event['details'].get('name')}\nLevel: {event['details'].get('level')}"
+                            elif event["event_type"] in ["helicrash", "airdrop", "trader"]:
+                                details = f"Location: {event['details'].get('location')}"
+                            
+                            embed.add_field(
+                                name=f"{event_type} at {timestamp}",
+                                value=details if details else "No additional details",
+                                inline=False
+                            )
                     
-                    await ctx.send(embed=embed)
+                # Send a single embed with all events from all servers
+                await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error listing missions: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     async def track_server_events(self, server_id, channel_id):
         """
@@ -377,3 +390,9 @@ class MissionCommands(commands.Cog):
             return
         except Exception as e:
             logger.error(f"Fatal error in mission tracker for server {server_id}: {e}")
+
+def setup(bot):
+    """Add the cog to the bot directly when loaded via extension"""
+    bot.add_cog(MissionCommands(bot))
+    bot.application_command(mission_group)
+    logger.info("Loaded MissionCommands cog and registered mission command group")
