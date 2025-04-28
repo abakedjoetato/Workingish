@@ -29,7 +29,7 @@ class AdminCommands(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def admin(self, ctx):
         """Admin commands for bot management (requires Administrator permission)"""
-        await ctx.send("Available commands: `stats`, `premium`, `link`, `unlink`, `cleanup`, `purge`, `home`")
+        await ctx.send("Available commands: `stats`, `premium`, `features`, `link`, `unlink`, `cleanup`, `purge`, `home`")
     
     @admin.command(name="stats")
     @commands.has_permissions(administrator=True)
@@ -487,4 +487,102 @@ class AdminCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error purging guild data: {e}")
             await ctx.send(f"⚠️ An error occurred: {e}")
+            
+    @admin.command(name="features")
+    @commands.has_permissions(administrator=True)
+    async def show_features(self, ctx):
+        """
+        Display all available features by premium tier
+        
+        Usage: !admin features
+        
+        Shows a comparison of features available in each premium tier.
+        """
+        try:
+            db = await Database.get_instance()
+            tiers = await get_premium_tiers()
+            
+            # Create feature comparison embed
+            embed = discord.Embed(
+                title="Premium Features Comparison",
+                description="Features available in each premium tier",
+                color=discord.Color.gold()
+            )
+            
+            # Group features into categories for better organization
+            feature_categories = {
+                "🔢 Server Limits": ["max_servers", "max_history_days"],
+                "🔧 Core Features": ["basic_stats", "leaderboard", "killfeed", "connection_tracking", "mission_tracking", "player_linking"],
+                "✨ Advanced Features": ["advanced_stats", "historical_parsing", "custom_embeds", "csv_parsing", "log_parsing"],
+                "⭐ Premium Features": ["faction_system", "rivalry_tracking"]
+            }
+            
+            # Display current tier
+            current_tier = await db.get_guild_premium_tier(ctx.guild.id)
+            embed.add_field(
+                name="Your Current Tier",
+                value=f"**{current_tier.title()}**",
+                inline=False
+            )
+            
+            # Add a comparison table for each feature category
+            for category, features in feature_categories.items():
+                # Build feature table for this category
+                table = "```\n"
+                table += f"{'Feature':<20} | {'Free':<8} | {'Premium':<8} | {'Enterprise':<10}\n"
+                table += f"{'-' * 20} | {'-' * 8} | {'-' * 8} | {'-' * 10}\n"
+                
+                for feature in features:
+                    feature_name = feature.replace('_', ' ').title()
+                    feature_name = feature_name[:18] + ".." if len(feature_name) > 18 else feature_name
+                    
+                    # Get values for each tier
+                    free_val = self._format_feature_value(tiers["free"].get(feature, "N/A"))
+                    premium_val = self._format_feature_value(tiers["premium"].get(feature, "N/A"))
+                    enterprise_val = self._format_feature_value(tiers["enterprise"].get(feature, "N/A"))
+                    
+                    table += f"{feature_name:<20} | {free_val:<8} | {premium_val:<8} | {enterprise_val:<10}\n"
+                
+                table += "```"
+                
+                embed.add_field(
+                    name=category,
+                    value=table,
+                    inline=False
+                )
+            
+            # Add feature descriptions
+            descriptions = {
+                "faction_system": "Create and manage player factions with Discord role integration",
+                "rivalry_tracking": "Track player rivalries (nemesis/prey) for enhanced stats",
+                "custom_embeds": "Customize embed colors and appearance",
+                "advanced_stats": "View detailed player performance metrics and trends",
+                "historical_parsing": "Process historical log files for complete data"
+            }
+            
+            desc_text = "__Premium Feature Descriptions:__\n\n"
+            for feature, desc in descriptions.items():
+                desc_text += f"**{feature.replace('_', ' ').title()}**: {desc}\n"
+            
+            embed.add_field(
+                name="Feature Details",
+                value=desc_text,
+                inline=False
+            )
+            
+            embed.set_footer(text="Use !admin premium to view your current tier details")
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error in features command: {e}")
+            await ctx.send(f"Error displaying features: {e}")
+    
+    def _format_feature_value(self, value):
+        """Helper method to format feature values for the comparison table"""
+        if isinstance(value, bool):
+            return "✓" if value else "✗"
+        elif value is None:
+            return "∞"  # infinity symbol for unlimited
+        else:
+            return str(value)
 

@@ -21,6 +21,16 @@ PREMIUM_TIERS = {
         "max_history_days": 0,
         "custom_embeds": False,
         "advanced_stats": False,
+        "faction_system": False,
+        "rivalry_tracking": False,
+        "connection_tracking": True,
+        "killfeed": True,
+        "basic_stats": True,
+        "player_linking": True,
+        "mission_tracking": True,
+        "leaderboard": True,
+        "csv_parsing": True,
+        "log_parsing": True
     },
     "premium": {
         "max_servers": 3,
@@ -28,6 +38,16 @@ PREMIUM_TIERS = {
         "max_history_days": 7,
         "custom_embeds": True,
         "advanced_stats": True,
+        "faction_system": True,
+        "rivalry_tracking": True,
+        "connection_tracking": True,
+        "killfeed": True,
+        "basic_stats": True,
+        "player_linking": True,
+        "mission_tracking": True,
+        "leaderboard": True,
+        "csv_parsing": True,
+        "log_parsing": True
     },
     "enterprise": {
         "max_servers": 10,
@@ -35,6 +55,16 @@ PREMIUM_TIERS = {
         "max_history_days": 30,
         "custom_embeds": True,
         "advanced_stats": True,
+        "faction_system": True,
+        "rivalry_tracking": True,
+        "connection_tracking": True,
+        "killfeed": True,
+        "basic_stats": True,
+        "player_linking": True,
+        "mission_tracking": True,
+        "leaderboard": True,
+        "csv_parsing": True,
+        "log_parsing": True
     }
 }
 
