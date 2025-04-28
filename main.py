@@ -9,9 +9,9 @@ from cogs.server_commands_slash import ServerCommands, server_group
 from cogs.stats_commands import StatsCommands
 from cogs.killfeed_commands import KillfeedCommands, killfeed_group
 from cogs.connection_commands import ConnectionCommands, connection_group
-from cogs.mission_commands import MissionCommands
+from cogs.mission_commands import MissionCommands, mission_group
 from cogs.admin_commands import AdminCommands
-from cogs.faction_commands import FactionCommands
+from cogs.faction_commands import FactionCommands, faction_group
 
 # Import Flask app for Gunicorn
 from app import app
@@ -72,7 +72,7 @@ async def help_command(ctx):
         name="Main Command Groups",
         value="- `/server` - Server management commands\n"
               "- `/stats` - Statistics commands\n"
-              "- `/faction_create`, `/faction_info`, etc. - Faction management commands\n"
+              "- `/faction` - Faction management commands\n"
               "- `/killfeed` - Killfeed notification commands\n"
               "- `/connections` - Connection notification commands\n"
               "- `/missions` - Mission notification commands\n"
@@ -153,6 +153,14 @@ async def on_ready():
         # Add killfeed command group
         bot.add_application_command(killfeed_group)
         logger.info(f"Successfully registered killfeed command group")
+        
+        # Add mission command group
+        bot.add_application_command(mission_group)
+        logger.info(f"Successfully registered mission command group")
+        
+        # Add faction command group
+        bot.add_application_command(faction_group)
+        logger.info(f"Successfully registered faction command group")
     except Exception as e:
         logger.error(f"Failed to register command groups: {e}")
     

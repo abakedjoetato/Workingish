@@ -9,13 +9,23 @@ from utils.embeds import create_faction_embed
 
 logger = logging.getLogger('deadside_bot.factions')
 
+# Create a SlashCommandGroup for faction commands
+faction_group = discord.SlashCommandGroup(
+    name="faction",
+    description="Commands for managing player factions"
+)
+
 class FactionCommands(commands.Cog):
     """Commands for managing player factions"""
     
     def __init__(self, bot):
         self.bot = bot
+    
+    async def cog_load(self):
+        """Called when the cog is loaded. Safe to use async code here."""
+        logger.info("Faction commands cog loaded")
         
-    @commands.slash_command(name="faction_create", description="Create a new faction")
+    @faction_group.command(name="create", description="Create a new faction")
     async def create_faction(self, ctx, name: str, abbreviation: str):
         """
         Create a new faction with the given name and abbreviation
@@ -108,7 +118,7 @@ class FactionCommands(commands.Cog):
         embed = await create_faction_embed(faction, ctx.guild)
         await ctx.respond(f"✅ Faction '{name}' created successfully with abbreviation '{abbreviation.upper()}'!", embed=embed)
         
-    @commands.slash_command(name="faction_info", description="View faction information")
+    @faction_group.command(name="info", description="View faction information")
     async def faction_info(self, ctx, name: str = None):
         """
         View information about a faction
@@ -183,7 +193,7 @@ class FactionCommands(commands.Cog):
         embed = await create_faction_embed(faction, ctx.guild, member_stats)
         await ctx.respond(embed=embed)
         
-    @commands.slash_command(name="faction_list", description="List all factions in this server")
+    @faction_group.command(name="list", description="List all factions in this server")
     async def list_factions(self, ctx):
         """List all factions in the current guild"""
         db = self.bot.db
@@ -214,7 +224,7 @@ class FactionCommands(commands.Cog):
             
         await ctx.respond(embed=embed)
         
-    @commands.slash_command(name="faction_invite", description="Invite a member to your faction")
+    @faction_group.command(name="invite", description="Invite a member to your faction")
     async def invite_member(self, ctx, member: discord.Member):
         """
         Invite a member to your faction
@@ -291,7 +301,7 @@ class FactionCommands(commands.Cog):
             # Silently ignore if we can't DM the member
             pass
         
-    @commands.slash_command(name="faction_leave", description="Leave your current faction")
+    @faction_group.command(name="leave", description="Leave your current faction")
     async def leave_faction(self, ctx):
         """Leave your current faction"""
         db = self.bot.db
@@ -355,7 +365,7 @@ class FactionCommands(commands.Cog):
             
         await ctx.respond(f"✅ You have left the faction '{faction.name}'.")
         
-    @commands.slash_command(name="faction_remove", description="Remove a member from your faction")
+    @faction_group.command(name="remove", description="Remove a member from your faction")
     async def remove_member(self, ctx, member: discord.Member):
         """
         Remove a member from your faction
@@ -414,7 +424,7 @@ class FactionCommands(commands.Cog):
             # Silently ignore if we can't DM the member
             pass
             
-    @commands.slash_command(name="faction_transfer", description="Transfer faction leadership to another member")
+    @faction_group.command(name="transfer", description="Transfer faction leadership to another member")
     async def transfer_leadership(self, ctx, member: discord.Member):
         """
         Transfer faction leadership to another member
@@ -456,7 +466,7 @@ class FactionCommands(commands.Cog):
             # Silently ignore if we can't DM the member
             pass
             
-    @commands.slash_command(name="faction_stats", description="View faction statistics")
+    @faction_group.command(name="stats", description="View faction statistics")
     async def faction_stats(self, ctx, name: str = None):
         """
         View combined statistics for all members of a faction
@@ -570,7 +580,7 @@ class FactionCommands(commands.Cog):
         # Send the embed
         await ctx.respond(embed=embed)
         
-    @commands.slash_command(name="faction_leaderboard", description="View faction leaderboard for the server")
+    @faction_group.command(name="leaderboard", description="View faction leaderboard for the server")
     async def faction_leaderboard(self, ctx):
         """
         View a leaderboard of all factions in the server
