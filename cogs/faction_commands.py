@@ -6,13 +6,16 @@ from bson import ObjectId
 
 from database.models import Faction, Player
 from utils.embeds import create_faction_embed
+from utils.decorators import premium_tier_required, guild_only
+from utils.premium import check_feature_access, get_tier_display_info
 
 logger = logging.getLogger('deadside_bot.factions')
 
 # Create a SlashCommandGroup for faction commands
 faction_group = discord.SlashCommandGroup(
     name="faction",
-    description="Commands for managing player factions"
+    description="Commands for managing player factions",
+    default_member_permissions=discord.Permissions(manage_roles=True)
 )
 
 class FactionCommands(commands.Cog):
@@ -20,16 +23,22 @@ class FactionCommands(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
+        self.db = getattr(bot, 'db', None)  # Get db from bot if available
     
     async def cog_load(self):
         """Called when the cog is loaded. Safe to use async code here."""
         logger.info("Faction commands cog loaded")
+        # Ensure db is set before attempting any database operations
+        if not self.db and hasattr(self.bot, 'db'):
+            self.db = self.bot.db
         
     # This function is needed to expose the commands to the bot
     def get_commands(self):
         return [faction_group]
         
     @faction_group.command(name="create", description="Create a new faction")
+    @premium_tier_required(tier=1)
+    @guild_only()
     async def create_faction(self, ctx, name: str, abbreviation: str):
         """
         Create a new faction with the given name and abbreviation
@@ -123,6 +132,7 @@ class FactionCommands(commands.Cog):
         await ctx.respond(f"✅ Faction '{name}' created successfully with abbreviation '{abbreviation.upper()}'!", embed=embed)
         
     @faction_group.command(name="info", description="View faction information")
+    @premium_tier_required(tier=1)
     async def faction_info(self, ctx, name: str = None):
         """
         View information about a faction
@@ -198,6 +208,7 @@ class FactionCommands(commands.Cog):
         await ctx.respond(embed=embed)
         
     @faction_group.command(name="list", description="List all factions in this server")
+    @premium_tier_required(tier=1)
     async def list_factions(self, ctx):
         """List all factions in the current guild"""
         db = self.bot.db
@@ -229,6 +240,7 @@ class FactionCommands(commands.Cog):
         await ctx.respond(embed=embed)
         
     @faction_group.command(name="invite", description="Invite a member to your faction")
+    @premium_tier_required(tier=1)
     async def invite_member(self, ctx, member: discord.Member):
         """
         Invite a member to your faction
@@ -306,6 +318,7 @@ class FactionCommands(commands.Cog):
             pass
         
     @faction_group.command(name="leave", description="Leave your current faction")
+    @premium_tier_required(tier=1)
     async def leave_faction(self, ctx):
         """Leave your current faction"""
         db = self.bot.db
@@ -370,6 +383,7 @@ class FactionCommands(commands.Cog):
         await ctx.respond(f"✅ You have left the faction '{faction.name}'.")
         
     @faction_group.command(name="remove", description="Remove a member from your faction")
+    @premium_tier_required(tier=1)
     async def remove_member(self, ctx, member: discord.Member):
         """
         Remove a member from your faction
@@ -429,6 +443,7 @@ class FactionCommands(commands.Cog):
             pass
             
     @faction_group.command(name="transfer", description="Transfer faction leadership to another member")
+    @premium_tier_required(tier=1)
     async def transfer_leadership(self, ctx, member: discord.Member):
         """
         Transfer faction leadership to another member
@@ -471,6 +486,7 @@ class FactionCommands(commands.Cog):
             pass
             
     @faction_group.command(name="stats", description="View faction statistics")
+    @premium_tier_required(tier=1)
     async def faction_stats(self, ctx, name: str = None):
         """
         View combined statistics for all members of a faction
@@ -584,7 +600,8 @@ class FactionCommands(commands.Cog):
         # Send the embed
         await ctx.respond(embed=embed)
         
-    @faction_group.command(name="leaderboard", description="View faction leaderboard for the server")
+    @faction_group.command(name="leaderboard", description="View faction leaderboard for the server") 
+    @premium_tier_required(tier=1)
     async def faction_leaderboard(self, ctx):
         """
         View a leaderboard of all factions in the server

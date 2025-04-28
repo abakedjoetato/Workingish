@@ -88,6 +88,13 @@ class Database:
             guild_configs = cls._db["guild_configs"]
             await guild_configs.create_index("guild_id", unique=True)
             
+            # Create indexes for factions collection
+            factions = cls._db["factions"]
+            await factions.create_index("guild_id")
+            await factions.create_index([("name", 1), ("guild_id", 1)], unique=True)
+            await factions.create_index([("abbreviation", 1), ("guild_id", 1)], unique=True)
+            await factions.create_index("leader_id")
+            
             # Create global_config collection for bot-wide settings including home guild
             # Initialize with default values if it doesn't exist
             global_config_collection = cls._db["global_config"]
@@ -101,6 +108,25 @@ class Database:
                     "created_at": datetime.utcnow(),
                     "updated_at": datetime.utcnow()
                 })
+            
+            # Create errors collection for error logging
+            errors = cls._db["errors"]
+            await errors.create_index("timestamp")
+            await errors.create_index("error_type")
+            await errors.create_index("guild_id")
+            
+            # Create test_results collection for command test results
+            test_results = cls._db["test_results"]
+            await test_results.create_index("timestamp")
+            
+            # Apply schema validations to collections
+            try:
+                from database.schema import apply_schema_validations
+                await apply_schema_validations(cls._instance)
+            except ImportError:
+                logger.warning("Schema validation module not found, skipping schema validations")
+            except Exception as schema_error:
+                logger.error(f"Failed to apply schema validations: {schema_error}")
             
             logger.info("MongoDB collections and indexes initialized")
         except Exception as e:

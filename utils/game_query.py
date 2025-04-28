@@ -74,6 +74,8 @@ async def query_steam_server(host, port):
     Returns:
         dict: Server status information
     """
+    # Initialize sock as None to handle potential LSP errors about unbound variables
+    sock = None
     try:
         # Use timeout to avoid hanging
         socket.setdefaulttimeout(5)
@@ -114,10 +116,12 @@ async def query_steam_server(host, port):
     except Exception as e:
         return create_error_response(f"Query failed: {str(e)}")
     finally:
-        try:
-            sock.close()
-        except:
-            pass
+        # Check if sock was initialized before trying to close it
+        if sock is not None:
+            try:
+                sock.close()
+            except:
+                pass
 
 def parse_steam_response(response):
     """

@@ -61,9 +61,11 @@ The bot uses Discord's slash commands for all functionality. Here are the main c
 
 ## Premium Tiers
 
-- **Free**: Basic functionality with limited servers and features
-- **Premium**: More servers, enhanced features
-- **Enterprise**: Maximum servers, all features enabled
+- **Survivor (Free)**: Basic functionality with 1 server and limited features
+- **Warlord (Premium)**: 3 servers, enhanced features, faction system, rivalry tracking
+- **Overseer (Enterprise)**: 10 servers, all features enabled, extended history
+
+For detailed information on premium tiers and their features, see [Premium Tier Documentation](README-Premium.md).
 
 ## Setup
 
@@ -79,3 +81,5 @@ The bot uses Discord's slash commands for all functionality. Here are the main c
 - Async architecture for optimal performance
 - Comprehensive error handling and logging
 - Remote log parsing via SFTP or local file access
+
+For detailed API documentation, database models, and utility functions, see [API Documentation](README-API.md).
