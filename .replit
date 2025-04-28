@@ -1,7 +1,8 @@
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "python-3.11"]
 
 [nix]
 channel = "stable-24_05"
+packages = ["cacert"]
 
 [workflows]
 runButton = "Project"
