@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} | Deadside Bot</title>
+    <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">Deadside Bot</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('servers') }}">Servers</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('stats') }}">Statistics</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1 class="mb-4">Statistics</h1>
+        
+        <div class="row mb-4">
+            <div class="col-md-3 mb-4">
+                <div class="card bg-dark text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Total Players</h5>
+                        <h2 class="display-4">256</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card bg-dark text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Total Kills</h5>
+                        <h2 class="display-4">1,458</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card bg-dark text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Active Servers</h5>
+                        <h2 class="display-4">2</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card bg-dark text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Events Today</h5>
+                        <h2 class="display-4">43</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-8 mb-4">
+                <div class="card bg-dark text-white h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">Kill Activity (Last 7 Days)</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="killChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card bg-dark text-white h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Top Players</h5>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
+                                Kills
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                                <li><a class="dropdown-item" href="#">Kills</a></li>
+                                <li><a class="dropdown-item" href="#">K/D Ratio</a></li>
+                                <li><a class="dropdown-item" href="#">Playtime</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group list-group-flush">
+                            <div class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0">DeadsideKing</h6>
+                                    <small>K/D: 3.5</small>
+                                </div>
+                                <span class="badge bg-primary rounded-pill">95 kills</span>
+                            </div>
+                            <div class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0">Sniper_Pro</h6>
+                                    <small>K/D: 2.8</small>
+                                </div>
+                                <span class="badge bg-primary rounded-pill">78 kills</span>
+                            </div>
+                            <div class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0">ZombieHunter</h6>
+                                    <small>K/D: 2.5</small>
+                                </div>
+                                <span class="badge bg-primary rounded-pill">64 kills</span>
+                            </div>
+                            <div class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0">ShadowWalker</h6>
+                                    <small>K/D: 2.1</small>
+                                </div>
+                                <span class="badge bg-primary rounded-pill">52 kills</span>
+                            </div>
+                            <div class="list-group-item bg-dark text-white d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0">GhostRecon</h6>
+                                    <small>K/D: 1.9</small>
+                                </div>
+                                <span class="badge bg-primary rounded-pill">48 kills</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card bg-dark text-white h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">Weapon Usage</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="weaponChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card bg-dark text-white h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">Player Connection Activity</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="connectionChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card bg-dark text-white mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Player Search</h5>
+                <div class="input-group" style="max-width: 300px;">
+                    <input type="text" class="form-control" placeholder="Search player...">
+                    <button class="btn btn-primary" type="button">Search</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    Enter a player name to view detailed statistics.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white mt-5 py-3">
+        <div class="container text-center">
+            <p>Deadside Bot © 2025</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Kill Activity Chart
+        const killCtx = document.getElementById('killChart').getContext('2d');
+        const killChart = new Chart(killCtx, {
+            type: 'line',
+            data: {
+                labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+                datasets: [{
+                    label: 'Kills',
+                    data: [65, 59, 80, 81, 56, 55, 72],
+                    borderColor: '#5865F2',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+        
+        // Weapon Usage Chart
+        const weaponCtx = document.getElementById('weaponChart').getContext('2d');
+        const weaponChart = new Chart(weaponCtx, {
+            type: 'pie',
+            data: {
+                labels: ['AK-47', 'M4', 'Mosin', 'SVD', 'UZI', 'Other'],
+                datasets: [{
+                    data: [30, 25, 15, 10, 10, 10],
+                    backgroundColor: [
+                        '#5865F2',
+                        '#57F287',
+                        '#FEE75C',
+                        '#EB459E',
+                        '#ED4245',
+                        '#99AAB5'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+        
+        // Connection Activity Chart
+        const connectionCtx = document.getElementById('connectionChart').getContext('2d');
+        const connectionChart = new Chart(connectionCtx, {
+            type: 'bar',
+            data: {
+                labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
+                datasets: [{
+                    label: 'Player Count',
+                    data: [12, 5, 8, 15, 25, 32],
+                    backgroundColor: '#5865F2'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

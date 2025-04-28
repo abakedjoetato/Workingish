@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} | Deadside Bot</title>
+    <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">Deadside Bot</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('servers') }}">Servers</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('stats') }}">Statistics</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1 class="mb-4">Settings</h1>
+        
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="list-group">
+                    <a href="#" class="list-group-item list-group-item-action active bg-dark" data-bs-toggle="list" data-target="generalSettings">
+                        General Settings
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action bg-dark" data-bs-toggle="list" data-target="discordSettings">
+                        Discord Integration
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action bg-dark" data-bs-toggle="list" data-target="notificationSettings">
+                        Notification Settings
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action bg-dark" data-bs-toggle="list" data-target="apiSettings">
+                        API Access
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action bg-dark" data-bs-toggle="list" data-target="premiumSettings">
+                        Premium Features
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action bg-dark" data-bs-toggle="list" data-target="userManagement">
+                        User Management
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-8 mb-4">
+                <div id="generalSettings" class="settings-panel active">
+                    <div class="card bg-dark text-white">
+                        <div class="card-header">
+                            <h5 class="mb-0">General Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <form>
+                                <div class="mb-3">
+                                    <label for="timeZone" class="form-label">Time Zone</label>
+                                    <select class="form-select" id="timeZone">
+                                        <option>UTC</option>
+                                        <option>Europe/London</option>
+                                        <option>America/New_York</option>
+                                        <option>America/Los_Angeles</option>
+                                        <option>Asia/Tokyo</option>
+                                        <option>Australia/Sydney</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="dateFormat" class="form-label">Date Format</label>
+                                    <select class="form-select" id="dateFormat">
+                                        <option>MM/DD/YYYY</option>
+                                        <option>DD/MM/YYYY</option>
+                                        <option>YYYY-MM-DD</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="timeFormat" class="form-label">Time Format</label>
+                                    <select class="form-select" id="timeFormat">
+                                        <option>12-hour (AM/PM)</option>
+                                        <option>24-hour</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableDebugMode">
+                                    <label class="form-check-label" for="enableDebugMode">Enable Debug Mode</label>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableDetailedLogs">
+                                    <label class="form-check-label" for="enableDetailedLogs">Enable Detailed Logs</label>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="discordSettings" class="settings-panel d-none">
+                    <div class="card bg-dark text-white">
+                        <div class="card-header">
+                            <h5 class="mb-0">Discord Integration</h5>
+                        </div>
+                        <div class="card-body">
+                            <form>
+                                <div class="mb-3">
+                                    <label for="botPrefix" class="form-label">Command Prefix</label>
+                                    <input type="text" class="form-control" id="botPrefix" value="!">
+                                    <div class="form-text">This is the character used before commands (e.g., !stats)</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="botActivity" class="form-label">Bot Activity Status</label>
+                                    <input type="text" class="form-control" id="botActivity" value="Deadside Servers | !help">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="activityType" class="form-label">Activity Type</label>
+                                    <select class="form-select" id="activityType">
+                                        <option>Playing</option>
+                                        <option selected>Watching</option>
+                                        <option>Listening to</option>
+                                        <option>Competing in</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="deleteCommands" checked>
+                                    <label class="form-check-label" for="deleteCommands">Delete Commands After Execution</label>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Discord Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="notificationSettings" class="settings-panel d-none">
+                    <div class="card bg-dark text-white">
+                        <div class="card-header">
+                            <h5 class="mb-0">Notification Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <form>
+                                <h6 class="mb-3">Killfeed Notifications</h6>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableKillfeed" checked>
+                                    <label class="form-check-label" for="enableKillfeed">Enable Kill Feed</label>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="killfeedFormat" class="form-label">Killfeed Format</label>
+                                    <select class="form-select" id="killfeedFormat">
+                                        <option>Simple</option>
+                                        <option selected>Detailed (with weapon & distance)</option>
+                                        <option>Custom</option>
+                                    </select>
+                                </div>
+                                
+                                <h6 class="mb-3 mt-4">Connection Notifications</h6>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableConnectionNotifs" checked>
+                                    <label class="form-check-label" for="enableConnectionNotifs">Enable Connection Notifications</label>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="showDisconnections" checked>
+                                    <label class="form-check-label" for="showDisconnections">Show Disconnections</label>
+                                </div>
+                                
+                                <h6 class="mb-3 mt-4">Mission Notifications</h6>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableMissionNotifs" checked>
+                                    <label class="form-check-label" for="enableMissionNotifs">Enable Mission Notifications</label>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Event Types to Notify</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyMissions" checked>
+                                        <label class="form-check-label" for="notifyMissions">Missions</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyHelicrashes" checked>
+                                        <label class="form-check-label" for="notifyHelicrashes">Heli Crashes</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyAirdrops" checked>
+                                        <label class="form-check-label" for="notifyAirdrops">Air Drops</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyTraders" checked>
+                                        <label class="form-check-label" for="notifyTraders">Trader Events</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyServerStart" checked>
+                                        <label class="form-check-label" for="notifyServerStart">Server Start/Stop</label>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary">Save Notification Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="apiSettings" class="settings-panel d-none">
+                    <div class="card bg-dark text-white">
+                        <div class="card-header">
+                            <h5 class="mb-0">API Access</h5>
+                        </div>
+                        <div class="card-body">
+                            <form>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableAPI">
+                                    <label class="form-check-label" for="enableAPI">Enable API Access</label>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="apiKey" class="form-label">API Key</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="apiKey" value="a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6" readonly>
+                                        <button class="btn btn-outline-secondary" type="button">Regenerate</button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="allowedOrigins" class="form-label">Allowed Origins (CORS)</label>
+                                    <input type="text" class="form-control" id="allowedOrigins" placeholder="https://example.com,https://api.example.com">
+                                    <div class="form-text">Comma-separated list of allowed origins</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">API Endpoints</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="enablePlayerAPI" checked>
+                                        <label class="form-check-label" for="enablePlayerAPI">Player Data</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="enableServerAPI" checked>
+                                        <label class="form-check-label" for="enableServerAPI">Server Info</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="enableKillsAPI" checked>
+                                        <label class="form-check-label" for="enableKillsAPI">Kill Data</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="enableEventsAPI" checked>
+                                        <label class="form-check-label" for="enableEventsAPI">Events</label>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save API Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="premiumSettings" class="settings-panel d-none">
+                    <div class="card bg-dark text-white">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Premium Features</h5>
+                            <span class="badge bg-warning">Premium</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <strong>Premium Tier:</strong> Enterprise
+                                <div>Expires: January 15, 2026</div>
+                            </div>
+                            
+                            <h6 class="mb-3">Custom Embed Settings</h6>
+                            <form>
+                                <div class="mb-3">
+                                    <label for="embedColor" class="form-label">Primary Embed Color</label>
+                                    <input type="color" class="form-control form-control-color" id="embedColor" value="#5865F2">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="embedLogo" class="form-label">Custom Logo URL</label>
+                                    <input type="text" class="form-control" id="embedLogo" placeholder="https://example.com/logo.png">
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableCustomFooter">
+                                    <label class="form-check-label" for="enableCustomFooter">Custom Footer Text</label>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="footerText" class="form-label">Footer Text</label>
+                                    <input type="text" class="form-control" id="footerText" placeholder="Powered by Your Server Name">
+                                </div>
+                                
+                                <h6 class="mb-3 mt-4">Historical Data</h6>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableHistoricalData" checked>
+                                    <label class="form-check-label" for="enableHistoricalData">Enable Historical Data Parsing</label>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="historyDays" class="form-label">Keep History For</label>
+                                    <select class="form-select" id="historyDays">
+                                        <option>7 days</option>
+                                        <option>14 days</option>
+                                        <option selected>30 days</option>
+                                        <option>60 days</option>
+                                        <option>90 days</option>
+                                    </select>
+                                </div>
+                                
+                                <h6 class="mb-3 mt-4">Advanced Analytics</h6>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableAdvancedStats" checked>
+                                    <label class="form-check-label" for="enableAdvancedStats">Enable Advanced Statistics</label>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="enableHeatmaps">
+                                    <label class="form-check-label" for="enableHeatmaps">Generate Kill Heatmaps</label>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-warning">Save Premium Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="userManagement" class="settings-panel d-none">
+                    <div class="card bg-dark text-white">
+                        <div class="card-header">
+                            <h5 class="mb-0">User Management</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-3">
+                                <h6>Dashboard Users</h6>
+                                <button class="btn btn-sm btn-success">Add User</button>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-dark table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                            <th>Role</th>
+                                            <th>Last Access</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>admin</td>
+                                            <td>admin@example.com</td>
+                                            <td>Administrator</td>
+                                            <td>Today, 2:45 PM</td>
+                                            <td>
+                                                <div class="btn-group">
+                                                    <button type="button" class="btn btn-sm btn-primary">Edit</button>
+                                                    <button type="button" class="btn btn-sm btn-danger">Delete</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>moderator</td>
+                                            <td>mod@example.com</td>
+                                            <td>Moderator</td>
+                                            <td>Yesterday, 8:12 AM</td>
+                                            <td>
+                                                <div class="btn-group">
+                                                    <button type="button" class="btn btn-sm btn-primary">Edit</button>
+                                                    <button type="button" class="btn btn-sm btn-danger">Delete</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <h6 class="mt-4 mb-3">Discord Role Permissions</h6>
+                            <div class="table-responsive">
+                                <table class="table table-dark table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Role</th>
+                                            <th>Admin Commands</th>
+                                            <th>Server Commands</th>
+                                            <th>View Stats</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Admin</td>
+                                            <td>✅</td>
+                                            <td>✅</td>
+                                            <td>✅</td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-primary">Edit</button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Moderator</td>
+                                            <td>❌</td>
+                                            <td>✅</td>
+                                            <td>✅</td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-primary">Edit</button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Member</td>
+                                            <td>❌</td>
+                                            <td>❌</td>
+                                            <td>✅</td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-primary">Edit</button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-white mt-5 py-3">
+        <div class="container text-center">
+            <p>Deadside Bot © 2025</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Handle settings panel navigation
+        document.querySelectorAll('[data-bs-toggle="list"]').forEach(item => {
+            item.addEventListener('click', event => {
+                event.preventDefault();
+                
+                // Hide all panels
+                document.querySelectorAll('.settings-panel').forEach(panel => {
+                    panel.classList.add('d-none');
+                    panel.classList.remove('active');
+                });
+                
+                // Remove active class from all navigation items
+                document.querySelectorAll('.list-group-item').forEach(navItem => {
+                    navItem.classList.remove('active');
+                });
+                
+                // Show target panel
+                const targetId = item.getAttribute('data-target');
+                document.getElementById(targetId).classList.remove('d-none');
+                document.getElementById(targetId).classList.add('active');
+                
+                // Add active class to clicked navigation item
+                item.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

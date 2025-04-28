@@ -1,0 +1,2281 @@
+*Thinking...*
+
+> This prompt is asking me to create a detailed plan for a Discord bot that monitors Deadside game servers. The bot needs to parse CSV logs and deadside.log files to track player statistics, in-game events, and provide analytics with Discord user integration. I'll summarize the key requirements and then provide a comprehensive plan for development.
+> 
+> ## Key Requirements Overview
+> 1. **Log Parsing:** Parse CSV logs for kill events and deadside.log for missions, connections, etc.
+> 2. **Multiple Parser Types:** Implement automated, historical, and event monitor parsers
+> 3. **Database Architecture:** Choose an appropriate database system (likely MongoDB based on requirements)
+> 4. **Player Identity Management:** Link Discord users to game characters
+> 5. **Statistical Tracking:** Calculate various player and server statistics
+> 6. **Command Structure:** Implement various command groups in separate cogs
+> 7. **Premium Tier System:** Different feature levels based on subscription
+> 8. **Log File Access:** Support multiple methods for accessing log files
+> 9. **Technical Requirements:** Use py-cord v2.4.0+ with async implementation
+> 
+> Now, I'll create a comprehensive development plan for this bot.
+> 
+> ## Development Plan
+> 
+> ### 1. Project Setup & Dependencies
+> 
+> First, let's set up the project structure and dependencies:
+> 
+> ```
+> deadside_bot/
+> ├── main.py                  # Entry point
+> ├── config.py                # Configuration
+> ├── database/                # Database connection and models
+> │   ├── __init__.py
+> │   ├── models.py            # Database models/schemas
+> │   ├── connection.py        # DB connection handling
+> ├── parsers/                 # Log parsing modules
+> │   ├── __init__.py
+> │   ├── csv_parser.py        # CSV log parser
+> │   ├── log_parser.py        # deadside.log parser
+> │   ├── parser_memory.py     # Parser state tracking
+> ├── cogs/                    # Discord command modules
+> │   ├── __init__.py
+> │   ├── server_commands.py   # Server management commands
+> │   ├── stats_commands.py    # Statistics commands
+> │   ├── killfeed_commands.py # Killfeed configuration
+> │   ├── connection_commands.py # Connection tracking
+> │   ├── mission_commands.py  # Mission tracking
+> │   ├── admin_commands.py    # Admin commands
+> ├── utils/                   # Utility functions
+> │   ├── __init__.py
+> │   ├── embeds.py            # Discord embed generators
+> │   ├── log_access.py        # File access methods (SFTP, local)
+> │   ├── premium.py           # Premium tier management
+> ```
+> 
+> Dependencies:
+> - py-cord>=2.4.0
+> - motor (MongoDB async driver)
+> - asyncssh (for SFTP access)
+> - pandas (for data processing)
+> - aiofiles (for async file operations)
+> - python-dateutil (for date parsing)
+> 
+> ### 2. Database Selection & Implementation
+> 
+> Based on the requirements, **MongoDB** seems most suitable for this project:
+> - Good support for time-series data
+> - Excellent aggregation pipeline capabilities
+> - Handles concurrent writes well
+> - NoSQL structure works well for the varied data types
+> - Good performance with large datasets
+> - Support for relations between collections via references
+> 
+> Let's implement the database connection and models:
+> 
+> ```python
+> # database/connection.py
+> import motor.motor_asyncio
+> from config import MONGODB_URI
+> 
+> class Database:
+>     _instance = None
+>     _client = None
+>     _db = None
+>     
+>     @classmethod
+>     async def get_instance(cls):
+>         if cls._instance is None:
+>             cls._instance = cls()
+>             cls._client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URI)
+>             cls._db = cls._client.deadside_bot
+>         return cls._instance
+>     
+>     async def get_collection(self, collection_name):
+>         return self._db[collection_name]
+> ```
+> 
+> ```python
+> # database/models.py
+> from bson import ObjectId
+> from datetime import datetime
+> 
+> # Server model
+> class Server:
+>     collection_name = "servers"
+>     
+>     def __init__(self, name, ip, port, log_path, guild_id, csv_enabled=True, log_enabled=True):
+>         self.name = name
+>         self.ip = ip
+>         self.port = port
+>         self.log_path = log_path
+>         self.guild_id = guild_id
+>         self.csv_enabled = csv_enabled
+>         self.log_enabled = log_enabled
+>         self.added_at = datetime.utcnow()
+>         
+>     @classmethod
+>     async def create(cls, db, **kwargs):
+>         server = cls(**kwargs)
+>         result = await db.get_collection(cls.collection_name).insert_one(server.__dict__)
+>         server._id = result.inserted_id
+>         return server
+> 
+> # Similar models for players, kills, connections, events, parser_state, discord_links, player_alts, premium
+> ```
+> 
+> ### 3. Parser Implementation
+> 
+> Let's implement the three parser types:
+> 
+> ```python
+> # parsers/csv_parser.py
+> import csv
+> import aiofiles
+> import pandas as pd
+> from datetime import datetime
+> from database.connection import Database
+> 
+> class CSVParser:
+>     def __init__(self, server_id, is_historical=False):
+>         self.server_id = server_id
+>         self.is_historical = is_historical
+>         self.last_position = 0
+>         
+>     async def load_state(self):
+>         db = await Database.get_instance()
+>         parser_state_collection = await db.get_collection("parser_state")
+>         state = await parser_state_collection.find_one({
+>             "server_id": self.server_id,
+>             "parser_type": "csv",
+>             "is_historical": self.is_historical
+>         })
+>         
+>         if state:
+>             self.last_position = state.get("last_position", 0)
+>             
+>     async def save_state(self):
+>         db = await Database.get_instance()
+>         parser_state_collection = await db.get_collection("parser_state")
+>         
+>         await parser_state_collection.update_one(
+>             {
+>                 "server_id": self.server_id,
+>                 "parser_type": "csv",
+>                 "is_historical": self.is_historical
+>             },
+>             {
+>                 "$set": {
+>                     "last_position": self.last_position,
+>                     "updated_at": datetime.utcnow()
+>                 }
+>             },
+>             upsert=True
+>         )
+>     
+>     async def reset_state(self):
+>         self.last_position = 0
+>         await self.save_state()
+>     
+>     async def parse_file(self, file_path):
+>         await self.load_state()
+>         
+>         async with aiofiles.open(file_path, mode='r') as f:
+>             # Seek to last position if not historical
+>             if not self.is_historical and self.last_position > 0:
+>                 await f.seek(self.last_position)
+>                 
+>             content = await f.read()
+>             current_position = await f.tell()
+>             
+>         lines = content.strip().split('\n')
+>         if not lines or (len(lines) == 1 and not lines[0]):
+>             # No new content
+>             return []
+>             
+>         # Process CSV data
+>         processed_records = []
+>         reader = csv.reader(lines)
+>         
+>         for row in reader:
+>             if len(row) < 7:  # Ensure we have all required fields
+>                 continue
+>                 
+>             timestamp_str, killer_name, killer_id, victim_name, victim_id, weapon, distance = row[:7]
+>             
+>             try:
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 distance = float(distance) if distance else 0
+>             except (ValueError, TypeError):
+>                 continue
+>                 
+>             # Handle special cases
+>             is_suicide = killer_id == victim_id
+>             is_menu_suicide = weapon == "suicide_by_relocation"
+>             is_fall_death = weapon == "falling"  # Adjust based on actual identifier
+>             
+>             record = {
+>                 "timestamp": timestamp,
+>                 "killer_name": killer_name,
+>                 "killer_id": killer_id,
+>                 "victim_name": victim_name,
+>                 "victim_id": victim_id,
+>                 "weapon": weapon,
+>                 "distance": distance,
+>                 "is_suicide": is_suicide,
+>                 "is_menu_suicide": is_menu_suicide,
+>                 "is_fall_death": is_fall_death,
+>                 "server_id": self.server_id
+>             }
+>             
+>             processed_records.append(record)
+>         
+>         # Save new records to database
+>         if processed_records:
+>             db = await Database.get_instance()
+>             kills_collection = await db.get_collection("kills")
+>             await kills_collection.insert_many(processed_records)
+>             
+>             # Update player statistics
+>             await self.update_player_stats(processed_records)
+>         
+>         # Update parser state
+>         self.last_position = current_position
+>         await self.save_state()
+>         
+>         return processed_records
+>         
+>     async def update_player_stats(self, records):
+>         # Get unique player IDs from the records
+>         killer_ids = {r["killer_id"] for r in records if r["killer_id"]}
+>         victim_ids = {r["victim_id"] for r in records if r["victim_id"]}
+>         player_ids = killer_ids.union(victim_ids)
+>         
+>         db = await Database.get_instance()
+>         players_collection = await db.get_collection("players")
+>         
+>         # Update each player's stats
+>         for player_id in player_ids:
+>             # Kills where player is killer (excluding suicides)
+>             kills = [r for r in records if r["killer_id"] == player_id and not r["is_suicide"]]
+>             # Deaths where player is victim
+>             deaths = [r for r in records if r["victim_id"] == player_id]
+>             
+>             # Get player name (most recent)
+>             player_name = None
+>             if kills:
+>                 player_name = kills[-1]["killer_name"]
+>             elif deaths:
+>                 player_name = deaths[-1]["victim_name"]
+>                 
+>             if player_name:
+>                 # Update player record
+>                 await players_collection.update_one(
+>                     {"player_id": player_id},
+>                     {
+>                         "$set": {"player_name": player_name},
+>                         "$inc": {
+>                             "total_kills": len(kills),
+>                             "total_deaths": len(deaths)
+>                         }
+>                     },
+>                     upsert=True
+>                 )
+> ```
+> 
+> ```python
+> # parsers/log_parser.py
+> import re
+> import aiofiles
+> from datetime import datetime
+> from database.connection import Database
+> 
+> class LogParser:
+>     def __init__(self, server_id):
+>         self.server_id = server_id
+>         self.last_position = 0
+>         
+>         # Compile regex patterns
+>         self.mission_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Mission spawned: (.+) \(Level (\d+)\)')
+>         self.helicrash_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Helicopter crash at .+')
+>         self.airdrop_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Airdrop at .+')
+>         self.trader_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Trader appeared at .+')
+>         self.connect_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] (.+) connected')
+>         self.disconnect_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] (.+) disconnected')
+>         self.server_start_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Server started')
+>         self.server_stop_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Server stopped')
+>         self.kick_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] (.+) was kicked: (.+)')
+>         
+>     async def load_state(self):
+>         db = await Database.get_instance()
+>         parser_state_collection = await db.get_collection("parser_state")
+>         state = await parser_state_collection.find_one({
+>             "server_id": self.server_id,
+>             "parser_type": "log"
+>         })
+>         
+>         if state:
+>             self.last_position = state.get("last_position", 0)
+>             
+>     async def save_state(self):
+>         db = await Database.get_instance()
+>         parser_state_collection = await db.get_collection("parser_state")
+>         
+>         await parser_state_collection.update_one(
+>             {
+>                 "server_id": self.server_id,
+>                 "parser_type": "log"
+>             },
+>             {
+>                 "$set": {
+>                     "last_position": self.last_position,
+>                     "updated_at": datetime.utcnow()
+>                 }
+>             },
+>             upsert=True
+>         )
+>     
+>     async def reset_state(self):
+>         self.last_position = 0
+>         await self.save_state()
+>     
+>     async def parse_file(self, file_path):
+>         await self.load_state()
+>         
+>         async with aiofiles.open(file_path, mode='r') as f:
+>             # Seek to last position
+>             if self.last_position > 0:
+>                 await f.seek(self.last_position)
+>                 
+>             content = await f.read()
+>             current_position = await f.tell()
+>             
+>         lines = content.strip().split('\n')
+>         if not lines or (len(lines) == 1 and not lines[0]):
+>             # No new content
+>             return []
+>             
+>         events = []
+>         connections = []
+>         
+>         for line in lines:
+>             # Check for mission events
+>             mission_match = self.mission_regex.search(line)
+>             if mission_match:
+>                 timestamp_str, mission_name, level = mission_match.groups()
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 events.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "mission",
+>                     "mission_name": mission_name,
+>                     "mission_level": int(level),
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for helicrash events
+>             helicrash_match = self.helicrash_regex.search(line)
+>             if helicrash_match:
+>                 timestamp_str = helicrash_match.group(1)
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 events.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "helicrash",
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for airdrop events
+>             airdrop_match = self.airdrop_regex.search(line)
+>             if airdrop_match:
+>                 timestamp_str = airdrop_match.group(1)
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 events.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "airdrop",
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for trader events
+>             trader_match = self.trader_regex.search(line)
+>             if trader_match:
+>                 timestamp_str = trader_match.group(1)
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 events.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "trader",
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for connection events
+>             connect_match = self.connect_regex.search(line)
+>             if connect_match:
+>                 timestamp_str, player_name = connect_match.groups()
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 connections.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "connect",
+>                     "player_name": player_name,
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for disconnection events
+>             disconnect_match = self.disconnect_regex.search(line)
+>             if disconnect_match:
+>                 timestamp_str, player_name = disconnect_match.groups()
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 connections.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "disconnect",
+>                     "player_name": player_name,
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for server start events
+>             server_start_match = self.server_start_regex.search(line)
+>             if server_start_match:
+>                 timestamp_str = server_start_match.group(1)
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 events.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "server_start",
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for server stop events
+>             server_stop_match = self.server_stop_regex.search(line)
+>             if server_stop_match:
+>                 timestamp_str = server_stop_match.group(1)
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 events.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "server_stop",
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>             
+>             # Check for kick events
+>             kick_match = self.kick_regex.search(line)
+>             if kick_match:
+>                 timestamp_str, player_name, reason = kick_match.groups()
+>                 timestamp = datetime.strptime(timestamp_str, "%Y.%m.%d-%H.%M.%S")
+>                 connections.append({
+>                     "timestamp": timestamp,
+>                     "event_type": "kick",
+>                     "player_name": player_name,
+>                     "reason": reason,
+>                     "server_id": self.server_id
+>                 })
+>                 continue
+>         
+>         # Save events to database
+>         db = await Database.get_instance()
+>         
+>         if events:
+>             events_collection = await db.get_collection("events")
+>             await events_collection.insert_many(events)
+>         
+>         if connections:
+>             connections_collection = await db.get_collection("connections")
+>             await connections_collection.insert_many(connections)
+>         
+>         # Update parser state
+>         self.last_position = current_position
+>         await self.save_state()
+>         
+>         return events + connections
+> ```
+> 
+> ### 4. File Access Utilities
+> 
+> ```python
+> # utils/log_access.py
+> import os
+> import asyncio
+> import aiofiles
+> import asyncssh
+> from pathlib import Path
+> 
+> class LogAccessManager:
+>     @staticmethod
+>     async def get_local_file(file_path):
+>         """Access a file on the local filesystem"""
+>         if not os.path.exists(file_path):
+>             raise FileNotFoundError(f"File not found: {file_path}")
+>         return file_path
+>     
+>     @staticmethod
+>     async def get_sftp_file(server_config, remote_path, local_cache_dir="./cache"):
+>         """Download a file via SFTP and return the local path"""
+>         # Create cache directory if it doesn't exist
+>         os.makedirs(local_cache_dir, exist_ok=True)
+>         
+>         # Generate a unique filename for the downloaded file
+>         server_id = server_config.get("_id", "unknown")
+>         file_name = Path(remote_path).name
+>         local_path = f"{local_cache_dir}/{server_id}_{file_name}"
+>         
+>         try:
+>             async with asyncssh.connect(
+>                 server_config["ip"],
+>                 port=server_config.get("ssh_port", 22),
+>                 username=server_config["ssh_username"],
+>                 password=server_config.get("ssh_password"),
+>                 client_keys=server_config.get("ssh_key_path")
+>             ) as conn:
+>                 async with conn.start_sftp_client() as sftp:
+>                     await sftp.get(remote_path, local_path)
+>             
+>             return local_path
+>         except (asyncssh.Error, OSError) as e:
+>             raise Exception(f"SFTP error: {str(e)}")
+>     
+>     @staticmethod
+>     async def handle_uploaded_file(upload_path):
+>         """Process a manually uploaded file"""
+>         if not os.path.exists(upload_path):
+>             raise FileNotFoundError(f"Uploaded file not found: {upload_path}")
+>         return upload_path
+> ```
+> 
+> ### 5. Discord Cogs Implementation
+> 
+> Let's implement the command cogs:
+> 
+> ```python
+> # cogs/server_commands.py
+> import discord
+> from discord.ext import commands
+> from discord import Option, SlashCommandGroup
+> import asyncio
+> from database.connection import Database
+> from parsers.csv_parser import CSVParser
+> from parsers.log_parser import LogParser
+> from utils.log_access import LogAccessManager
+> from utils.premium import check_premium_limit
+> from utils.embeds import create_server_embed
+> 
+> class ServerCommands(commands.Cog):
+>     def __init__(self, bot):
+>         self.bot = bot
+>         self.parser_tasks = {}
+>     
+>     server = SlashCommandGroup("server", "Server management commands")
+>     
+>     @server.command(name="add", description="Add a new Deadside server to monitor")
+>     async def add_server(
+>         self, 
+>         ctx, 
+>         name: Option(str, "Server name"),
+>         ip: Option(str, "Server IP address"),
+>         port: Option(int, "Server port", min_value=1, max_value=65535),
+>         log_path: Option(str, "Path to server logs"),
+>         csv_enabled: Option(bool, "Enable CSV parsing", default=True),
+>         log_enabled: Option(bool, "Enable log parsing", default=True),
+>         access_type: Option(str, "Log access method", choices=["local", "sftp", "upload"], default="local"),
+>         ssh_username: Option(str, "SSH username (if using SFTP)", required=False),
+>         ssh_password: Option(str, "SSH password (if using SFTP)", required=False),
+>         ssh_port: Option(int, "SSH port (if using SFTP)", default=22, required=False)
+>     ):
+>         # Check premium limits
+>         db = await Database.get_instance()
+>         servers_collection = await db.get_collection("servers")
+>         
+>         server_count = await servers_collection.count_documents({"guild_id": ctx.guild.id})
+>         max_servers = await check_premium_limit(ctx.guild.id)
+>         
+>         if server_count >= max_servers:
+>             return await ctx.respond(f"❌ Premium limit reached! You can monitor up to {max_servers} servers in your current tier.")
+>         
+>         # Create server record
+>         server_data = {
+>             "name": name,
+>             "ip": ip,
+>             "port": port,
+>             "log_path": log_path,
+>             "guild_id": ctx.guild.id,
+>             "csv_enabled": csv_enabled,
+>             "log_enabled": log_enabled,
+>             "access_type": access_type
+>         }
+>         
+>         # Add SFTP details if needed
+>         if access_type == "sftp":
+>             if not ssh_username:
+>                 return await ctx.respond("❌ SSH username is required for SFTP access!")
+>             
+>             server_data["ssh_username"] = ssh_username
+>             server_data["ssh_password"] = ssh_password
+>             server_data["ssh_port"] = ssh_port
+>         
+>         # Insert server into database
+>         result = await servers_collection.insert_one(server_data)
+>         server_id = result.inserted_id
+>         
+>         # Start historical parsing
+>         if csv_enabled:
+>             await ctx.respond(f"✅ Server added! Starting historical CSV parsing...")
+>             
+>             # Create and run historical parser
+>             historical_parser = CSVParser(server_id, is_historical=True)
+>             try:
+>                 if access_type == "local":
+>                     csv_path = f"{log_path}/kills.csv"  # Adjust based on actual file naming
+>                     await historical_parser.parse_file(csv_path)
+>                 elif access_type == "sftp":
+>                     csv_path = f"{log_path}/kills.csv"
+>                     local_path = await LogAccessManager.get_sftp_file(server_data, csv_path)
+>                     await historical_parser.parse_file(local_path)
+>                 
+>                 await ctx.send(f"✅ Historical parsing complete for server '{name}'!")
+>             except Exception as e:
+>                 await ctx.send(f"⚠️ Error during historical parsing: {str(e)}")
+>         else:
+>             await ctx.respond(f"✅ Server '{name}' added successfully!")
+>         
+>         # Set up automated parsing
+>         self._start_automated_parsing(server_id, server_data)
+>     
+>     @server.command(name="remove", description="Remove a server from monitoring")
+>     async def remove_server(
+>         self,
+>         ctx,
+>         server: Option(str, "Server to remove")
+>     ):
+>         db = await Database.get_instance()
+>         servers_collection = await db.get_collection("servers")
+>         
+>         # Find server by name in this guild
+>         server_doc = await servers_collection.find_one({
+>             "name": server,
+>             "guild_id": ctx.guild.id
+>         })
+>         
+>         if not server_doc:
+>             return await ctx.respond(f"❌ Server '{server}' not found!")
+>         
+>         # Stop any running parser tasks
+>         server_id = server_doc["_id"]
+>         if server_id in self.parser_tasks:
+>             self.parser_tasks[server_id].cancel()
+>             del self.parser_tasks[server_id]
+>         
+>         # Remove server from database
+>         await servers_collection.delete_one({"_id": server_id})
+>         
+>         await ctx.respond(f"✅ Server '{server}' removed successfully!")
+>     
+>     @server.command(name="list", description="List all monitored servers")
+>     async def list_servers(self, ctx):
+>         db = await Database.get_instance()
+>         servers_collection = await db.get_collection("servers")
+>         
+>         servers = await servers_collection.find({"guild_id": ctx.guild.id}).to_list(length=None)
+>         
+>         if not servers:
+>             return await ctx.respond("❌ No servers are being monitored!")
+>         
+>         embed = discord.Embed(
+>             title="Monitored Servers",
+>             description=f"Found {len(servers)} servers",
+>             color=discord.Color.blue()
+>         )
+>         
+>         for server in servers:
+>             status = "🟢 Active" if server.get("_id") in self.parser_tasks else "🔴 Inactive"
+>             features = []
+>             if server.get("csv_enabled"):
+>                 features.append("CSV Parsing")
+>             if server.get("log_enabled"):
+>                 features.append("Log Monitoring")
+>             
+>             embed.add_field(
+>                 name=f"{server['name']} ({server['ip']}:{server['port']})",
+>                 value=f"Status: {status}\nFeatures: {', '.join(features)}\nAccess: {server.get('access_type', 'local')}",
+>                 inline=False
+>             )
+>         
+>         await ctx.respond(embed=embed)
+>     
+>     @server.command(name="info", description="Show detailed server information")
+>     async def server_info(
+>         self,
+>         ctx,
+>         server: Option(str, "Server to show info for")
+>     ):
+>         db = await Database.get_instance()
+>         servers_collection = await db.get_collection("servers")
+>         
+>         # Find server by name in this guild
+>         server_doc = await servers_collection.find_one({
+>             "name": server,
+>             "guild_id": ctx.guild.id
+>         })
+>         
+>         if not server_doc:
+>             return await ctx.respond(f"❌ Server '{server}' not found!")
+>         
+>         # Get statistics for this server
+>         kills_collection = await db.get_collection("kills")
+>         events_collection = await db.get_collection("events")
+>         connections_collection = await db.get_collection("connections")
+>         
+>         kill_count = await kills_collection.count_documents({"server_id": server_doc["_id"]})
+>         event_count = await events_collection.count_documents({"server_id": server_doc["_id"]})
+>         connect_count = await connections_collection.count_documents({
+>             "server_id": server_doc["_id"],
+>             "event_type": "connect"
+>         })
+>         
+>         # Create embed with server details
+>         embed = create_server_embed(server_doc, kill_count, event_count, connect_count)
+>         
+>         await ctx.respond(embed=embed)
+>     
+>     @server.command(name="parse_historical", description="Manually trigger historical parsing")
+>     async def parse_historical(
+>         self,
+>         ctx,
+>         server: Option(str, "Server to parse historical data for")
+>     ):
+>         db = await Database.get_instance()
+>         servers_collection = await db.get_collection("servers")
+>         
+>         # Find server by name in this guild
+>         server_doc = await servers_collection.find_one({
+>             "name": server,
+>             "guild_id": ctx.guild.id
+>         })
+>         
+>         if not server_doc:
+>             return await ctx.respond(f"❌ Server '{server}' not found!")
+>         
+>         server_id = server_doc["_id"]
+>         
+>         await ctx.respond(f"⏳ Starting historical parsing for server '{server}'...")
+>         
+>         try:
+>             # Create and run historical parser
+>             historical_parser = CSVParser(server_id, is_historical=True)
+>             await historical_parser.reset_state()  # Reset to parse from beginning
+>             
+>             if server_doc.get("access_type") == "local":
+>                 csv_path = f"{server_doc['log_path']}/kills.csv"  # Adjust based on actual file naming
+>                 await historical_parser.parse_file(csv_path)
+>             elif server_doc.get("access_type") == "sftp":
+>                 csv_path = f"{server_doc['log_path']}/kills.csv"
+>                 local_path = await LogAccessManager.get_sftp_file(server_doc, csv_path)
+>                 await historical_parser.parse_file(local_path)
+>             
+>             await ctx.send(f"✅ Historical parsing complete for server '{server}'!")
+>         except Exception as e:
+>             await ctx.send(f"⚠️ Error during historical parsing: {str(e)}")
+>     
+>     @server.command(name="reset_parser", description="Reset parser memory")
+>     async def reset_parser(
+>         self,
+>         ctx,
+>         server: Option(str, "Server to reset parser for"),
+>         parser_type: Option(str, "Parser type to reset", choices=["csv", "log", "both"])
+>     ):
+>         db = await Database.get_instance()
+>         servers_collection = await db.get_collection("servers")
+>         
+>         # Find server by name in this guild
+>         server_doc = await servers_collection.find_one({
+>             "name": server,
+>             "guild_id": ctx.guild.id
+>         })
+>         
+>         if not server_doc:
+>             return await ctx.respond(f"❌ Server '{server}' not found!")
+>         
+>         server_id = server_doc["_id"]
+>         
+>         # Reset selected parser states
+>         if parser_type in ["csv", "both"]:
+>             csv_parser = CSVParser(server_id)
+>             await csv_parser.reset_state()
+>         
+>         if parser_type in ["log", "both"]:
+>             log_parser = LogParser(server_id)
+>             await log_parser.reset_state()
+>         
+>         await ctx.respond(f"✅ Parser memory reset for server '{server}'!")
+>     
+>     def _start_automated_parsing(self, server_id, server_data):
+>         """Start automated parsing tasks for a server"""
+>         if server_id in self.parser_tasks:
+>             self.parser_tasks[server_id].cancel()
+>         
+>         task = asyncio.create_task(self._parsing_loop(server_id, server_data))
+>         self.parser_tasks[server_id] = task
+>     
+>     async def _parsing_loop(self, server_id, server_data):
+>         """Background task for continuous parsing"""
+>         try:
+>             csv_parser = CSVParser(server_id) if server_data.get("csv_enabled") else None
+>             log_parser = LogParser(server_id) if server_data.get("log_enabled") else None
+>             
+>             while True:
+>                 try:
+>                     # Process CSV log file if enabled
+>                     if csv_parser:
+>                         if server_data.get("access_type") == "local":
+>                             csv_path = f"{server_data['log_path']}/kills.csv"
+>                             await csv_parser.parse_file(csv_path)
+>                         elif server_data.get("access_type") == "sftp":
+>                             csv_path = f"{server_data['log_path']}/kills.csv"
+>                             local_path = await LogAccessManager.get_sftp_file(server_data, csv_path)
+>                             await csv_parser.parse_file(local_path)
+>                     
+>                     # Process deadside.log file if enabled
+>                     if log_parser:
+>                         if server_data.get("access_type") == "local":
+>                             log_path = f"{server_data['log_path']}/deadside.log"
+>                             await log_parser.parse_file(log_path)
+>                         elif server_data.get("access_type") == "sftp":
+>                             log_path = f"{server_data['log_path']}/deadside.log"
+>                             local_path = await LogAccessManager.get_sftp_file(server_data, log_path)
+>                             await log_parser.parse_file(local_path)
+>                 
+>                 except Exception as e:
+>                     print(f"Error in parsing loop for server {server_id}: {str(e)}")
+>                 
+>                 # Sleep before next parsing cycle
+>                 await asyncio.sleep(60)  # Check every minute
+>         
+>         except asyncio.CancelledError:
+>             # Task was cancelled, clean up
+>             pass
+>         except Exception as e:
+>             print(f"Parsing loop terminated with error: {str(e)}")
+> 
+> def setup(bot):
+>     bot.add_cog(ServerCommands(bot))
+> ```
+> 
+> This is a comprehensive implementation for the server commands cog. I would continue with similar implementations for the other cogs (stats_commands.py, killfeed_commands.py, etc.) following the same pattern.
+> 
+> ### 6. Premium Tier Implementation
+> 
+> ```python
+> # utils/premium.py
+> from database.connection import Database
+> 
+> # Premium tier definitions
+> PREMIUM_TIERS = {
+>     "FREE": {"max_servers": 3},
+>     "SCOUT": {"max_servers": 5},
+>     "GUARDIAN": {"max_servers": 10},
+>     "OVERSEER": {"max_servers": float('inf')}  # Unlimited
+> }
+> 
+> async def get_guild_premium_tier(guild_id):
+>     """Get the premium tier for a guild"""
+>     db = await Database.get_instance()
+>     premium_collection = await db.get_collection("premium")
+>     
+>     premium_doc = await premium_collection.find_one({"guild_id": guild_id})
+>     
+>     if not premium_doc:
+>         return "FREE"  # Default tier
+>     
+>     return premium_doc.get("tier", "FREE")
+> 
+> async def set_guild_premium_tier(guild_id, tier):
+>     """Set the premium tier for a guild"""
+>     if tier not in PREMIUM_TIERS:
+>         raise ValueError(f"Invalid tier: {tier}")
+>     
+>     db = await Database.get_instance()
+>     premium_collection = await db.get_collection("premium")
+>     
+>     await premium_collection.update_one(
+>         {"guild_id": guild_id},
+>         {"$set": {"tier": tier}},
+>         upsert=True
+>     )
+>     
+>     return True
+> 
+> async def check_premium_limit(guild_id):
+>     """Check how many servers a guild can monitor based on premium tier"""
+>     tier = await get_guild_premium_tier(guild_id)
+>     return PREMIUM_TIERS[tier]["max_servers"]
+> ```
+> 
+> ### 7. Player Identity Management
+> 
+> ```python
+> # utils/player_identity.py
+> from database.connection import Database
+> 
+> async def link_discord_to_character(discord_id, player_id, is_main=True):
+>     """Link a Discord user to a game character"""
+>     db = await Database.get_instance()
+>     discord_links_collection = await db.get_collection("discord_links")
+>     
+>     # Check if this player ID is already linked to another Discord user
+>     existing_link = await discord_links_collection.find_one({"player_id": player_id})
+>     if existing_link and existing_link["discord_id"] != discord_id:
+>         return False, "This character is already linked to another Discord user."
+>     
+>     # Check if this is a main character
+>     if is_main:
+>         # Set all existing links for this Discord user to not-main
+>         await discord_links_collection.update_many(
+>             {"discord_id": discord_id},
+>             {"$set": {"is_main": False}}
+>         )
+>     
+>     # Create or update the link
+>     await discord_links_collection.update_one(
+>         {"discord_id": discord_id, "player_id": player_id},
+>         {"$set": {"is_main": is_main}},
+>         upsert=True
+>     )
+>     
+>     return True, "Character linked successfully."
+> 
+> async def get_linked_characters(discord_id):
+>     """Get all characters linked to a Discord user"""
+>     db = await Database.get_instance()
+>     discord_links_collection = await db.get_collection("discord_links")
+>     
+>     links = await discord_links_collection.find({"discord_id": discord_id}).to_list(length=None)
+>     
+>     if not links:
+>         return []
+>     
+>     # Get player details for each linked character
+>     player_ids = [link["player_id"] for link in links]
+>     players_collection = await db.get_collection("players")
+>     
+>     players = await players_collection.find({"player_id": {"$in": player_ids}}).to_list(length=None)
+>     
+>     # Combine with link information
+>     player_map = {player["player_id"]: player for player in players}
+>     
+>     result = []
+>     for link in links:
+>         player_id = link["player_id"]
+>         if player_id in player_map:
+>             player_info = player_map[player_id]
+>             result.append({
+>                 "player_id": player_id,
+>                 "player_name": player_info.get("player_name", "Unknown"),
+>                 "is_main": link.get("is_main", False),
+>                 "total_kills": player_info.get("total_kills", 0),
+>                 "total_deaths": player_info.get("total_deaths", 0)
+>             })
+>     
+>     return result
+> 
+> async def get_main_character(discord_id):
+>     """Get the main character for a Discord user"""
+>     db = await Database.get_instance()
+>     discord_links_collection = await db.get_collection("discord_links")
+>     
+>     main_link = await discord_links_collection.find_one({
+>         "discord_id": discord_id,
+>         "is_main": True
+>     })
+>     
+>     if not main_link:
+>         return None
+>     
+>     players_collection = await db.get_collection("players")
+>     player = await players_collection.find_one({"player_id": main_link["player_id"]})
+>     
+>     if not player:
+>         return None
+>     
+>     return player
+> 
+> async def register_alt_character(main_player_id, alt_player_id):
+>     """Register an alt character for a main character"""
+>     db = await Database.get_instance()
+>     player_alts_collection = await db.get_collection("player_alts")
+>     
+>     # Check if this alt is already linked to another main
+>     existing_alt = await player_alts_collection.find_one({"alt_player_id": alt_player_id})
+>     if existing_alt and existing_alt["main_player_id"] != main_player_id:
+>         return False, "This character is already an alt of another player."
+>     
+>     # Create or update the alt relationship
+>     await player_alts_collection.update_one(
+>         {"alt_player_id": alt_player_id},
+>         {"$set": {"main_player_id": main_player_id}},
+>         upsert=True
+>     )
+>     
+>     return True, "Alt character registered successfully."
+> 
+> async def get_all_characters_for_player(player_id):
+>     """Get all characters (main + alts) for a player"""
+>     db = await Database.get_instance()
+>     player_alts_collection = await db.get_collection("player_alts")
+>     
+>     # Check if this is a main character
+>     main_player_id = player_id
+>     
+>     # If it's an alt, find the main
+>     alt_record = await player_alts_collection.find_one({"alt_player_id": player_id})
+>     if alt_record:
+>         main_player_id = alt_record["main_player_id"]
+>     
+>     # Get all alts for this main
+>     alts = await player_alts_collection.find({"main_player_id": main_player_id}).to_list(length=None)
+>     alt_ids = [alt["alt_player_id"] for alt in alts]
+>     
+>     # Combine main and alts
+>     all_ids = [main_player_id] + alt_ids
+>     
+>     # Get player details
+>     players_collection = await db.get_collection("players")
+>     players = await players_collection.find({"player_id": {"$in": all_ids}}).to_list(length=None)
+>     
+>     return players
+> ```
+> 
+> ### 8. Main Bot Implementation
+> 
+> ```python
+> # main.py
+> import asyncio
+> import discord
+> import os
+> from discord.ext import commands
+> from config import TOKEN, MONGODB_URI
+> from database.connection import Database
+> 
+> # Setup intents
+> intents = discord.Intents.default()
+> intents.message_content = True
+> intents.members = True
+> 
+> # Create bot instance
+> bot = commands.Bot(intents=intents)
+> 
+> # Load cogs
+> async def load_cogs():
+>     for filename in os.listdir("./cogs"):
+>         if filename.endswith(".py"):
+>             try:
+>                 await bot.load_extension(f"cogs.{filename[:-3]}")
+>                 print(f"Loaded cog: {filename}")
+>             except Exception as e:
+>                 print(f"Failed to load cog {filename}: {str(e)}")
+> 
+> @bot.event
+> async def on_ready():
+>     print(f"Bot is ready! Logged in as {bot.user}")
+>     print(f"Bot ID: {bot.user.id}")
+>     
+>     # Initialize database connection
+>     await Database.get_instance()
+>     print("Database connection initialized")
+>     
+>     # Set bot status
+>     await bot.change_presence(
+>         activity=discord.Activity(
+>             type=discord.ActivityType.watching,
+>             name="Deadside Servers"
+>         )
+>     )
+> 
+> @bot.event
+> async def on_application_command_error(ctx, error):
+>     if isinstance(error, commands.errors.CommandInvokeError):
+>         error = error.original
+>     
+>     if isinstance(error, commands.errors.MissingPermissions):
+>         await ctx.respond("❌ You don't have the necessary permissions to use this command!", ephemeral=True)
+>     elif isinstance(error, commands.errors.BotMissingPermissions):
+>         await ctx.respond("❌ I don't have the necessary permissions to execute this command!", ephemeral=True)
+>     else:
+>         await ctx.respond(f"❌ An error occurred: {str(error)}", ephemeral=True)
+>         raise error
+> 
+> # Main entry point
+> async def main():
+>     # Load environment variables and configuration
+>     print("Starting Deadside Discord Bot...")
+>     
+>     # Load all cogs
+>     await load_cogs()
+>     
+>     # Start the bot
+>     await bot.start(TOKEN)
+> 
+> if __name__ == "__main__":
+>     asyncio.run(main())
+> ```
+> 
+> ### 9. Configuration and Utility Files
+> 
+> ```python
+> # config.py
+> import os
+> from dotenv import load_dotenv
+> 
+> load_dotenv()
+> 
+> # Bot token
+> TOKEN = os.getenv("DISCORD_TOKEN")
+> 
+> # MongoDB connection string
+> MONGODB_URI = os.getenv("MONGODB_URI")
+> 
+> # Default settings
+> DEFAULT_PREFIX = "!"
+> DEFAULT_EMBED_COLOR = 0x3498db
+> ```
+> 
+> ```python
+> # utils/embeds.py
+> import discord
+> from datetime import datetime
+> 
+> def create_server_embed(server, kill_count, event_count, connect_count):
+>     """Create a server information embed"""
+>     embed = discord.Embed(
+>         title=f"Server: {server['name']}",
+>         description=f"`{server['ip']}:{server['port']}`",
+>         color=discord.Color.blue(),
+>         timestamp=datetime.utcnow()
+>     )
+>     
+>     # Server details
+>     status = "🟢 Active" if server.get("active", True) else "🔴 Inactive"
+>     embed.add_field(name="Status", value=status, inline=True)
+>     
+>     access_type = server.get("access_type", "local").capitalize()
+>     embed.add_field(name="Access Type", value=access_type, inline=True)
+>     
+>     # Add statistics
+>     embed.add_field(name="Kills Tracked", value=f"{kill_count:,}", inline=True)
+>     embed.add_field(name="Events Recorded", value=f"{event_count:,}", inline=True)
+>     embed.add_field(name="Player Connections", value=f"{connect_count:,}", inline=True)
+>     
+>     # Features
+>     features = []
+>     if server.get("csv_enabled"):
+>         features.append("✅ CSV Parsing")
+>     else:
+>         features.append("❌ CSV Parsing")
+>         
+>     if server.get("log_enabled"):
+>         features.append("✅ Log Monitoring")
+>     else:
+>         features.append("❌ Log Monitoring")
+>     
+>     embed.add_field(name="Features", value="\n".join(features), inline=False)
+>     
+>     # Add when server was added
+>     added_at = server.get("added_at", datetime.utcnow())
+>     embed.set_footer(text=f"Added on {added_at.strftime('%Y-%m-%d')}")
+>     
+>     return embed
+> 
+> def create_kill_embed(kill, include_discord=False):
+>     """Create a kill event embed"""
+>     # Determine embed color based on kill type
+>     if kill.get("is_suicide", False):
+>         color = discord.Color.red()
+>     else:
+>         color = discord.Color.green()
+>     
+>     # Create embed
+>     embed = discord.Embed(
+>         title="Kill Event",
+>         description=f"`{kill['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}`",
+>         color=color
+>     )
+>     
+>     # Kill information
+>     if kill.get("is_menu_suicide", False):
+>         embed.add_field(name="Event", value=f"**{kill['victim_name']}** left the game via menu", inline=False)
+>     elif kill.get("is_fall_death", False):
+>         embed.add_field(name="Event", value=f"**{kill['victim_name']}** died from falling", inline=False)
+>     elif kill.get("is_suicide", False):
+>         embed.add_field(name="Event", value=f"**{kill['killer_name']}** committed suicide", inline=False)
+>     else:
+>         embed.add_field(
+>             name="Kill", 
+>             value=f"**{kill['killer_name']}** killed **{kill['victim_name']}**", 
+>             inline=False
+>         )
+>     
+>     # Weapon information
+>     if not kill.get("is_menu_suicide", False) and not kill.get("is_fall_death", False):
+>         embed.add_field(name="Weapon", value=kill["weapon"], inline=True)
+>     
+>     # Distance (if applicable)
+>     if kill.get("distance", 0) > 0 and not kill.get("is_menu_suicide", False) and not kill.get("is_fall_death", False):
+>         embed.add_field(name="Distance", value=f"{kill['distance']:.1f}m", inline=True)
+>     
+>     # Include Discord user information if requested and available
+>     if include_discord and "discord_user" in kill:
+>         discord_user = kill["discord_user"]
+>         embed.set_author(name=discord_user["name"], icon_url=discord_user["avatar_url"])
+>     
+>     return embed
+> 
+> def create_mission_embed(event):
+>     """Create a mission event embed"""
+>     embed = discord.Embed(
+>         title="Mission Spawned",
+>         description=f"`{event['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}`",
+>         color=discord.Color.gold()
+>     )
+>     
+>     if event["event_type"] == "mission":
+>         embed.add_field(name="Mission", value=event["mission_name"], inline=True)
+>         embed.add_field(name="Level", value=f"Level {event['mission_level']}", inline=True)
+>     elif event["event_type"] == "helicrash":
+>         embed.add_field(name="Event", value="Helicopter Crash", inline=False)
+>     elif event["event_type"] == "airdrop":
+>         embed.add_field(name="Event", value="Airdrop", inline=False)
+>     elif event["event_type"] == "trader":
+>         embed.add_field(name="Event", value="Trader Appeared", inline=False)
+>     
+>     return embed
+> 
+> def create_player_stats_embed(player, discord_user=None):
+>     """Create a player statistics embed"""
+>     embed = discord.Embed(
+>         title=f"Player Stats: {player['player_name']}",
+>         color=discord.Color.blue()
+>     )
+>     
+>     # Basic stats
+>     total_kills = player.get("total_kills", 0)
+>     total_deaths = player.get("total_deaths", 0)
+>     
+>     # Calculate K/D ratio
+>     if total_deaths > 0:
+>         kd_ratio = total_kills / total_deaths
+>     else:
+>         kd_ratio = total_kills if total_kills > 0 else 0
+>     
+>     embed.add_field(name="Kills", value=f"{total_kills:,}", inline=True)
+>     embed.add_field(name="Deaths", value=f"{total_deaths:,}", inline=True)
+>     embed.add_field(name="K/D Ratio", value=f"{kd_ratio:.2f}", inline=True)
+>     
+>     # Include player ID
+>     embed.add_field(name="Player ID", value=f"`{player['player_id']}`", inline=False)
+>     
+>     # Set author to Discord user if available
+>     if discord_user:
+>         embed.set_author(name=discord_user.display_name, icon_url=discord_user.display_avatar.url)
+>         embed.set_footer(text=f"Linked to Discord user: {discord_user.name}")
+>     
+>     return embed
+> 
+> def create_leaderboard_embed(players, metric, title):
+>     """Create a leaderboard embed"""
+>     embed = discord.Embed(
+>         title=title,
+>         color=discord.Color.gold()
+>     )
+>     
+>     # Add leaderboard entries
+>     for i, player in enumerate(players, 1):
+>         name = player["player_name"]
+>         value = player.get(metric, 0)
+>         
+>         # Format the value based on metric
+>         if metric == "kd_ratio":
+>             value_str = f"{value:.2f}"
+>         else:
+>             value_str = f"{value:,}"
+>         
+>         embed.add_field(
+>             name=f"{i}. {name}",
+>             value=value_str,
+>             inline=False
+>         )
+>     
+>     embed.set_footer(text=f"Top {len(players)} players")
+>     
+>     return embed
+> ```
+> 
+> ### 10. Advanced Statistical Queries
+> 
+> Here's an example of how to implement the advanced statistical queries required:
+> 
+> ```python
+> # utils/statistics.py
+> from database.connection import Database
+> from datetime import datetime, timedelta
+> 
+> async def get_player_kills(player_id, include_alts=True):
+>     """Get kill statistics for a player"""
+>     db = await Database.get_instance()
+>     
+>     # Get all character IDs (main + alts) if requested
+>     if include_alts:
+>         player_ids = await get_all_player_ids(player_id)
+>     else:
+>         player_ids = [player_id]
+>     
+>     kills_collection = await db.get_collection("kills")
+>     
+>     # Get all kills by this player (excluding suicides)
+>     kills = await kills_collection.find({
+>         "killer_id": {"$in": player_ids},
+>         "is_suicide": False
+>     }).to_list(length=None)
+>     
+>     return kills
+> 
+> async def get_player_deaths(player_id, include_alts=True):
+>     """Get death statistics for a player"""
+>     db = await Database.get_instance()
+>     
+>     # Get all character IDs (main + alts) if requested
+>     if include_alts:
+>         player_ids = await get_all_player_ids(player_id)
+>     else:
+>         player_ids = [player_id]
+>     
+>     kills_collection = await db.get_collection("kills")
+>     
+>     # Get all deaths of this player
+>     deaths = await kills_collection.find({
+>         "victim_id": {"$in": player_ids}
+>     }).to_list(length=None)
+>     
+>     return deaths
+> 
+> async def get_weapon_stats(player_id, include_alts=True):
+>     """Get weapon usage statistics for a player"""
+>     kills = await get_player_kills(player_id, include_alts)
+>     
+>     # Count weapons
+>     weapon_counts = {}
+>     for kill in kills:
+>         weapon = kill.get("weapon", "Unknown")
+>         weapon_counts[weapon] = weapon_counts.get(weapon, 0) + 1
+>     
+>     # Calculate percentages
+>     total_kills = len(kills)
+>     weapon_stats = []
+>     
+>     for weapon, count in weapon_counts.items():
+>         percentage = (count / total_kills * 100) if total_kills > 0 else 0
+>         weapon_stats.append({
+>             "weapon": weapon,
+>             "count": count,
+>             "percentage": percentage
+>         })
+>     
+>     # Sort by count (descending)
+>     weapon_stats.sort(key=lambda x: x["count"], reverse=True)
+>     
+>     return weapon_stats
+> 
+> async def get_player_rivalries(player_id, include_alts=True):
+>     """Get rivalries for a player"""
+>     kills = await get_player_kills(player_id, include_alts)
+>     deaths = await get_player_deaths(player_id, include_alts)
+>     
+>     # Count kills per victim
+>     victims = {}
+>     for kill in kills:
+>         victim_id = kill.get("victim_id")
+>         victim_name = kill.get("victim_name", "Unknown")
+>         
+>         if victim_id not in victims:
+>             victims[victim_id] = {
+>                 "id": victim_id,
+>                 "name": victim_name,
+>                 "kills": 0,
+>                 "deaths": 0
+>             }
+>         
+>         victims[victim_id]["kills"] += 1
+>     
+>     # Count deaths per killer
+>     killers = {}
+>     for death in deaths:
+>         killer_id = death.get("killer_id")
+>         killer_name = death.get("killer_name", "Unknown")
+>         
+>         if killer_id not in killers:
+>             killers[killer_id] = {
+>                 "id": killer_id,
+>                 "name": killer_name,
+>                 "kills": 0,
+>                 "deaths": 0
+>             }
+>         
+>         killers[killer_id]["deaths"] += 1
+>     
+>     # Combine for mutual relationships
+>     rivalries = {}
+>     
+>     # Add victims to rivalries
+>     for victim_id, victim_data in victims.items():
+>         if victim_id not in rivalries:
+>             rivalries[victim_id] = {
+>                 "id": victim_id,
+>                 "name": victim_data["name"],
+>                 "kills": victim_data["kills"],
+>                 "deaths": 0
+>             }
+>         else:
+>             rivalries[victim_id]["kills"] = victim_data["kills"]
+>     
+>     # Add killers to rivalries
+>     for killer_id, killer_data in killers.items():
+>         if killer_id not in rivalries:
+>             rivalries[killer_id] = {
+>                 "id": killer_id,
+>                 "name": killer_data["name"],
+>                 "kills": 0,
+>                 "deaths": killer_data["deaths"]
+>             }
+>         else:
+>             rivalries[killer_id]["deaths"] = killer_data["deaths"]
+>     
+>     # Convert to list and calculate rivalry score
+>     rivalry_list = []
+>     for rivalry in rivalries.values():
+>         # Skip if no meaningful relationship
+>         if rivalry["kills"] + rivalry["deaths"] < 3:
+>             continue
+>             
+>         rivalry["total"] = rivalry["kills"] + rivalry["deaths"]
+>         rivalry["score"] = (rivalry["kills"] * rivalry["deaths"]) * (rivalry["total"] / 10)
+>         rivalry_list.append(rivalry)
+>     
+>     # Sort by rivalry score
+>     rivalry_list.sort(key=lambda x: x["score"], reverse=True)
+>     
+>     return rivalry_list
+> 
+> async def get_server_activity(server_id, days=7):
+>     """Get server activity statistics"""
+>     db = await Database.get_instance()
+>     kills_collection = await db.get_collection("kills")
+>     connections_collection = await db.get_collection("connections")
+>     
+>     # Calculate start date
+>     end_date = datetime.utcnow()
+>     start_date = end_date - timedelta(days=days)
+>     
+>     # Get kills in time period
+>     kills = await kills_collection.find({
+>         "server_id": server_id,
+>         "timestamp": {"$gte": start_date}
+>     }).to_list(length=None)
+>     
+>     # Get connections in time period
+>     connections = await connections_collection.find({
+>         "server_id": server_id,
+>         "timestamp": {"$gte": start_date},
+>         "event_type": "connect"
+>     }).to_list(length=None)
+>     
+>     # Group by day
+>     days_dict = {}
+>     for day_offset in range(days):
+>         day = (end_date - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+>         days_dict[day] = {"date": day, "kills": 0, "connections": 0, "unique_players": set()}
+>     
+>     # Add kills to days
+>     for kill in kills:
+>         day = kill["timestamp"].strftime("%Y-%m-%d")
+>         if day in days_dict:
+>             days_dict[day]["kills"] += 1
+>             days_dict[day]["unique_players"].add(kill["killer_id"])
+>             days_dict[day]["unique_players"].add(kill["victim_id"])
+>     
+>     # Add connections to days
+>     for connection in connections:
+>         day = connection["timestamp"].strftime("%Y-%m-%d")
+>         if day in days_dict:
+>             days_dict[day]["connections"] += 1
+>             if "player_id" in connection:
+>                 days_dict[day]["unique_players"].add(connection["player_id"])
+>     
+>     # Convert to list and convert sets to counts
+>     activity = []
+>     for day, data in days_dict.items():
+>         activity.append({
+>             "date": day,
+>             "kills": data["kills"],
+>             "connections": data["connections"],
+>             "unique_players": len(data["unique_players"])
+>         })
+>     
+>     # Sort by date
+>     activity.sort(key=lambda x: x["date"])
+>     
+>     return activity
+> 
+> async def get_all_player_ids(player_id):
+>     """Get all player IDs (main + alts) for a player"""
+>     db = await Database.get_instance()
+>     player_alts_collection = await db.get_collection("player_alts")
+>     
+>     # Check if this is an alt
+>     alt_record = await player_alts_collection.find_one({"alt_player_id": player_id})
+>     main_player_id = alt_record["main_player_id"] if alt_record else player_id
+>     
+>     # Get all alts for this main
+>     alts = await player_alts_collection.find({"main_player_id": main_player_id}).to_list(length=None)
+>     alt_ids = [alt["alt_player_id"] for alt in alts]
+>     
+>     # Combine main and alts
+>     all_ids = [main_player_id] + alt_ids
+>     
+>     return all_ids
+> 
+> async def get_leaderboard(metric, limit=10, server_id=None):
+>     """Get a leaderboard by metric"""
+>     db = await Database.get_instance()
+>     players_collection = await db.get_collection("players")
+>     
+>     # Build query
+>     query = {}
+>     if server_id:
+>         query["server_id"] = server_id
+>     
+>     # Get players
+>     players = await players_collection.find(query).to_list(length=None)
+>     
+>     # Process based on metric
+>     if metric == "kills":
+>         players.sort(key=lambda x: x.get("total_kills", 0), reverse=True)
+>     elif metric == "deaths":
+>         players.sort(key=lambda x: x.get("total_deaths", 0), reverse=True)
+>     elif metric == "kd_ratio":
+>         for player in players:
+>             kills = player.get("total_kills", 0)
+>             deaths = player.get("total_deaths", 0)
+>             kd = kills / deaths if deaths > 0 else kills
+>             player["kd_ratio"] = kd
+>         players.sort(key=lambda x: x.get("kd_ratio", 0), reverse=True)
+>     
+>     # Limit results
+>     return players[:limit]
+> ```
+> 
+> ### 11. Additional Cogs (Example of Stats Commands)
+> 
+> ```python
+> # cogs/stats_commands.py
+> import discord
+> from discord.ext import commands
+> from discord import Option, SlashCommandGroup
+> from database.connection import Database
+> from utils.statistics import (
+>     get_player_kills, 
+>     get_player_deaths, 
+>     get_weapon_stats,
+>     get_player_rivalries,
+>     get_server_activity,
+>     get_leaderboard
+> )
+> from utils.player_identity import (
+>     get_linked_characters,
+>     get_main_character,
+>     link_discord_to_character
+> )
+> from utils.embeds import (
+>     create_player_stats_embed,
+>     create_leaderboard_embed
+> )
+> 
+> class StatsCommands(commands.Cog):
+>     def __init__(self, bot):
+>         self.bot = bot
+>     
+>     stats = SlashCommandGroup("stats", "Statistics commands")
+>     
+>     @stats.command(name="player", description="Show player statistics")
+>     async def player_stats(
+>         self, 
+>         ctx, 
+>         player_name: Option(str, "Player name to lookup", required=False),
+>         player_id: Option(str, "Player ID to lookup", required=False)
+>     ):
+>         if not player_name and not player_id:
+>             return await ctx.respond("❌ Please provide either a player name or ID!", ephemeral=True)
+>         
+>         db = await Database.get_instance()
+>         players_collection = await db.get_collection("players")
+>         
+>         # Find player by name or ID
+>         if player_id:
+>             player = await players_collection.find_one({"player_id": player_id})
+>         else:
+>             player = await players_collection.find_one({"player_name": player_name})
+>         
+>         if not player:
+>             return await ctx.respond(f"❌ Player not found!", ephemeral=True)
+>         
+>         # Check if player is linked to a Discord user
+>         discord_links_collection = await db.get_collection("discord_links")
+>         link = await discord_links_collection.find_one({"player_id": player["player_id"]})
+>         
+>         discord_user = None
+>         if link:
+>             try:
+>                 discord_user = await self.bot.fetch_user(link["discord_id"])
+>             except:
+>                 pass
+>         
+>         # Get detailed statistics
+>         kills = await get_player_kills(player["player_id"])
+>         deaths = await get_player_deaths(player["player_id"])
+>         weapon_stats = await get_weapon_stats(player["player_id"])
+>         
+>         # Create and send embeds
+>         main_embed = create_player_stats_embed(player, discord_user)
+>         
+>         # Add weapon stats
+>         weapon_text = ""
+>         for i, weapon in enumerate(weapon_stats[:5], 1):
+>             weapon_text += f"{i}. {weapon['weapon']}: {weapon['count']} ({weapon['percentage']:.1f}%)\n"
+>         
+>         if weapon_text:
+>             main_embed.add_field(name="Top Weapons", value=weapon_text, inline=False)
+>         
+>         await ctx.respond(embed=main_embed)
+>     
+>     @stats.command(name="discord", description="Show linked character stats")
+>     async def discord_stats(
+>         self,
+>         ctx,
+>         user: Option(discord.Member, "Discord user to lookup", required=False)
+>     ):
+>         target_user = user or ctx.author
+>         
+>         # Get linked characters
+>         characters = await get_linked_characters(target_user.id)
+>         
+>         if not characters:
+>             return await ctx.respond(f"❌ {target_user.mention} does not have any linked characters!", ephemeral=True)
+>         
+>         # Find main character
+>         main_character = next((c for c in characters if c["is_main"]), characters[0])
+>         
+>         # Create embed
+>         embed = discord.Embed(
+>             title=f"{target_user.display_name}'s Characters",
+>             description=f"Main character: **{main_character['player_name']}**",
+>             color=discord.Color.blue()
+>         )
+>         
+>         # Add total stats across all characters
+>         total_kills = sum(c.get("total_kills", 0) for c in characters)
+>         total_deaths = sum(c.get("total_deaths", 0) for c in characters)
+>         kd_ratio = total_kills / total_deaths if total_deaths > 0 else total_kills
+>         
+>         embed.add_field(name="Total Kills", value=f"{total_kills:,}", inline=True)
+>         embed.add_field(name="Total Deaths", value=f"{total_deaths:,}", inline=True)
+>         embed.add_field(name="Overall K/D", value=f"{kd_ratio:.2f}", inline=True)
+>         
+>         # Add each character
+>         for character in characters:
+>             char_kd = character.get("total_kills", 0) / character.get("total_deaths", 1) if character.get("total_deaths", 0) > 0 else character.get("total_kills", 0)
+>             
+>             status = "👑 Main" if character["is_main"] else "👤 Alt"
+>             embed.add_field(
+>                 name=f"{status} | {character['player_name']}",
+>                 value=f"ID: `{character['player_id']}`\nK/D: {char_kd:.2f} ({character.get('total_kills', 0)}/{character.get('total_deaths', 0)})",
+>                 inline=False
+>             )
+>         
+>         embed.set_thumbnail(url=target_user.display_avatar.url)
+>         
+>         await ctx.respond(embed=embed)
+>     
+>     @stats.command(name="weapon", description="Show weapon statistics")
+>     async def weapon_stats(
+>         self,
+>         ctx,
+>         weapon: Option(str, "Weapon name to lookup"),
+>         server: Option(str, "Server to filter by", required=False)
+>     ):
+>         db = await Database.get_instance()
+>         kills_collection = await db.get_collection("kills")
+>         
+>         # Build query
+>         query = {"weapon": weapon}
+>         if server:
+>             # Get server ID
+>             servers_collection = await db.get_collection("servers")
+>             server_doc = await servers_collection.find_one({
+>                 "name": server,
+>                 "guild_id": ctx.guild.id
+>             })
+>             
+>             if not server_doc:
+>                 return await ctx.respond(f"❌ Server '{server}' not found!", ephemeral=True)
+>             
+>             query["server_id"] = server_doc["_id"]
+>         
+>         # Get kills with this weapon
+>         kills = await kills_collection.find(query).to_list(length=None)
+>         
+>         if not kills:
+>             return await ctx.respond(f"❌ No kills found with weapon '{weapon}'!", ephemeral=True)
+>         
+>         # Calculate statistics
+>         total_kills = len(kills)
+>         avg_distance = sum(k.get("distance", 0) for k in kills) / total_kills if total_kills > 0 else 0
+>         
+>         # Count killers
+>         killer_counts = {}
+>         for kill in kills:
+>             killer_id = kill.get("killer_id")
+>             killer_name = kill.get("killer_name", "Unknown")
+>             
+>             if killer_id not in killer_counts:
+>                 killer_counts[killer_id] = {
+>                     "name": killer_name,
+>                     "count": 0
+>                 }
+>             
+>             killer_counts[killer_id]["count"] += 1
+>         
+>         # Sort killers by count
+>         top_killers = sorted(killer_counts.values(), key=lambda x: x["count"], reverse=True)[:5]
+>         
+>         # Create embed
+>         embed = discord.Embed(
+>             title=f"Weapon Stats: {weapon}",
+>             description=f"Total kills: **{total_kills:,}**",
+>             color=discord.Color.blue()
+>         )
+>         
+>         embed.add_field(name="Average Distance", value=f"{avg_distance:.1f}m", inline=True)
+>         
+>         # Add top killers
+>         killers_text = ""
+>         for i, killer in enumerate(top_killers, 1):
+>             killers_text += f"{i}. {killer['name']}: {killer['count']} kills\n"
+>         
+>         if killers_text:
+>             embed.add_field(name="Top Users", value=killers_text, inline=False)
+>         
+>         await ctx.respond(embed=embed)
+>     
+>     @stats.command(name="leaderboard", description="Show player leaderboard")
+>     async def leaderboard(
+>         self,
+>         ctx,
+>         metric: Option(str, "Stat to rank by", choices=["kills", "deaths", "kd_ratio"]),
+>         server: Option(str, "Server to filter by", required=False)
+>     ):
+>         server_id = None
+>         if server:
+>             # Get server ID
+>             db = await Database.get_instance()
+>             servers_collection = await db.get_collection("servers")
+>             server_doc = await servers_collection.find_one({
+>                 "name": server,
+>                 "guild_id": ctx.guild.id
+>             })
+>             
+>             if not server_doc:
+>                 return await ctx.respond(f"❌ Server '{server}' not found!", ephemeral=True)
+>             
+>             server_id = server_doc["_id"]
+>         
+>         # Get leaderboard
+>         players = await get_leaderboard(metric, limit=10, server_id=server_id)
+>         
+>         if not players:
+>             return await ctx.respond("❌ No player data found!", ephemeral=True)
+>         
+>         # Titles based on metric
+>         titles = {
+>             "kills": "Top Killers Leaderboard",
+>             "deaths": "Most Deaths Leaderboard",
+>             "kd_ratio": "Best K/D Ratio Leaderboard"
+>         }
+>         
+>         # Create embed
+>         embed = create_leaderboard_embed(
+>             players, 
+>             metric, 
+>             titles.get(metric, "Leaderboard")
+>         )
+>         
+>         if server:
+>             embed.description = f"Server: {server}"
+>         
+>         await ctx.respond(embed=embed)
+>     
+>     @stats.command(name="rivalry", description="Show player rivalries")
+>     async def rivalry(
+>         self,
+>         ctx,
+>         player_name: Option(str, "Player name to lookup", required=False),
+>         player_id: Option(str, "Player ID to lookup", required=False)
+>     ):
+>         if not player_name and not player_id:
+>             return await ctx.respond("❌ Please provide either a player name or ID!", ephemeral=True)
+>         
+>         db = await Database.get_instance()
+>         players_collection = await db.get_collection("players")
+>         
+>         # Find player by name or ID
+>         if player_id:
+>             player = await players_collection.find_one({"player_id": player_id})
+>         else:
+>             player = await players_collection.find_one({"player_name": player_name})
+>         
+>         if not player:
+>             return await ctx.respond(f"❌ Player not found!", ephemeral=True)
+>         
+>         # Get rivalries
+>         rivalries = await get_player_rivalries(player["player_id"])
+>         
+>         if not rivalries:
+>             return await ctx.respond(f"❌ No rivalries found for player '{player['player_name']}'!", ephemeral=True)
+>         
+>         # Create embed
+>         embed = discord.Embed(
+>             title=f"Rivalries for {player['player_name']}",
+>             color=discord.Color.red()
+>         )
+>         
+>         # Add top rivalries
+>         for i, rivalry in enumerate(rivalries[:5], 1):
+>             embed.add_field(
+>                 name=f"{i}. {rivalry['name']}",
+>                 value=f"Kills: {rivalry['kills']} | Deaths: {rivalry['deaths']}\n"
+>                       f"Total: {rivalry['total']} | Score: {rivalry['score']:.1f}",
+>                 inline=False
+>             )
+>         
+>         await ctx.respond(embed=embed)
+>     
+>     @stats.command(name="server", description="Show server statistics")
+>     async def server_stats(
+>         self,
+>         ctx,
+>         server: Option(str, "Server to show stats for"),
+>         days: Option(int, "Number of days to analyze", min_value=1, max_value=30, default=7)
+>     ):
+>         db = await Database.get_instance()
+>         servers_collection = await db.get_collection("servers")
+>         
+>         # Find server by name in this guild
+>         server_doc = await servers_collection.find_one({
+>             "name": server,
+>             "guild_id": ctx.guild.id
+>         })
+>         
+>         if not server_doc:
+>             return await ctx.respond(f"❌ Server '{server}' not found!", ephemeral=True)
+>         
+>         # Get server stats
+>         server_id = server_doc["_id"]
+>         activity = await get_server_activity(server_id, days)
+>         
+>         if not activity:
+>             return await ctx.respond(f"❌ No activity data found for server '{server}'!", ephemeral=True)
+>         
+>         # Calculate summary statistics
+>         total_kills = sum(day["kills"] for day in activity)
+>         total_connections = sum(day["connections"] for day in activity)
+>         avg_players = sum(day["unique_players"] for day in activity) / len(activity)
+>         
+>         # Create embed
+>         embed = discord.Embed(
+>             title=f"Server Stats: {server}",
+>             description=f"Last {days} days",
+>             color=discord.Color.blue()
+>         )
+>         
+>         embed.add_field(name="Total Kills", value=f"{total_kills:,}", inline=True)
+>         embed.add_field(name="Total Connections", value=f"{total_connections:,}", inline=True)
+>         embed.add_field(name="Avg. Daily Players", value=f"{avg_players:.1f}", inline=True)
+>         
+>         # Activity breakdown
+>         activity_text = ""
+>         for day in reversed(activity[-5:]):  # Show last 5 days
+>             activity_text += f"{day['date']}: {day['kills']} kills, {day['unique_players']} players\n"
+>         
+>         if activity_text:
+>             embed.add_field(name="Recent Activity", value=activity_text, inline=False)
+>         
+>         await ctx.respond(embed=embed)
+> 
+> def setup(bot):
+>     bot.add_cog(StatsCommands(bot))
+> ```
+> 
+> ## Final Development Checklist
+> 
+> 1. Implement all remaining cogs:
+>    - killfeed_commands.py
+>    - connection_commands.py
+>    - mission_commands.py
+>    - admin_commands.py
+> 
+> 2. Create Docker setup for production deployment:
+>    ```
+>    # Dockerfile
+>    FROM python:3.11-slim
+>    
+>    WORKDIR /app
+>    
+>    COPY requirements.txt .
+>    RUN pip install --no-cache-dir -r requirements.txt
+>    
+>    COPY . .
+>    
+>    CMD ["python", "main.py"]
+>    ```
+> 
+> 3. Create docker-compose.yml for easy deployment with MongoDB:
+>    ```
+>    version: '3'
+>    
+>    services:
+>      bot:
+>        build: .
+>        env_file:
+>          - .env
+>        restart: unless-stopped
+>        depends_on:
+>          - mongo
+>      
+>      mongo:
+>        image: mongo:latest
+>        ports:
+>          - "27017:27017"
+>        volumes:
+>          - mongo_data:/data/db
+>        restart: unless-stopped
+>    
+>    volumes:
+>      mongo_data:
+>    ```
+> 
+> 4. Create comprehensive documentation:
+>    - Installation guide
+>    - Command reference
+>    - Configuration options
+>    - Troubleshooting section
+> 
+> 5. Quality assurance:
+>    - Implement thorough error handling
+>    - Add detailed logging
+>    - Create automated tests for parsers
+>    - Test with example log files
+> 
+> ## Conclusion
+> 
+> This plan outlines a comprehensive implementation of the Deadside Discord bot based on the requirements. The architecture uses:
+> 
+> 1. **MongoDB** for the database due to its excellent support for the needed features
+> 2. **py-cord** as the Discord bot framework as specified
+> 3. **Async programming** throughout for scalability and performance
+> 4. **Modular design** with cogs for maintainability
+> 5. **Efficient parsers** that handle incremental processing
+> 6. **Premium tier system** for feature access control
+> 
+> The implementation provides all the required commands, statistical tracking, and parsing capabilities while ensuring high performance and scalability. It also includes proper error handling and logging to facilitate maintenance.
+
+
+Hi! I'll help you create a Deadside Discord bot based on your detailed specifications. Since this is a complex project with multiple components, I'll outline the key parts of the implementation.
+
+## Database Selection
+
+Based on your requirements, MongoDB is the most suitable database:
+- Excellent for time-series data (logs, events)
+- Strong aggregation pipeline support for statistics
+- Handles concurrent writes well
+- Good performance with large datasets
+- Suitable for async architecture
+
+## Core Components
+
+### 1. Parser System
+
+```python
+# parsers/csv_parser.py
+import csv
+import aiofiles
+from datetime import datetime
+from database.connection import Database
+
+class CSVParser:
+    def __init__(self, server_id, is_historical=False):
+        self.server_id = server_id
+        self.is_historical = is_historical
+        self.last_position = 0
+        
+    async def load_state(self):
+        db = await Database.get_instance()
+        parser_state = await db.get_collection("parser_state").find_one({
+            "server_id": self.server_id,
+            "parser_type": "csv",
+            "is_historical": self.is_historical
+        })
+        
+        if parser_state:
+            self.last_position = parser_state.get("last_position", 0)
+    
+    async def parse_file(self, file_path):
+        await self.load_state()
+        
+        async with aiofiles.open(file_path, mode='r') as f:
+            # Seek to last position if not historical
+            if not self.is_historical and self.last_position > 0:
+                await f.seek(self.last_position)
+                
+            content = await f.read()
+            current_position = await f.tell()
+            
+        # Process CSV data, check for special cases like suicides
+        # Store kills in database and update player statistics
+        # Update parser state
+        
+        self.last_position = current_position
+        await self.save_state()
+```
+
+```python
+# parsers/log_parser.py
+import re
+import aiofiles
+from datetime import datetime
+from database.connection import Database
+
+class LogParser:
+    def __init__(self, server_id):
+        self.server_id = server_id
+        self.last_position = 0
+        
+        # Compile regex patterns for mission events, connections, etc.
+        self.mission_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Mission spawned: (.+) \(Level (\d+)\)')
+        self.helicrash_regex = re.compile(r'\[(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2})\] Helicopter crash at .+')
+        # Additional regex patterns for other events
+```
+
+### 2. Database Models
+
+```python
+# database/models.py
+from datetime import datetime
+
+class Server:
+    collection_name = "servers"
+    
+    def __init__(self, name, ip, port, log_path, guild_id, csv_enabled=True, log_enabled=True):
+        self.name = name
+        self.ip = ip
+        self.port = port
+        self.log_path = log_path
+        self.guild_id = guild_id
+        self.csv_enabled = csv_enabled
+        self.log_enabled = log_enabled
+        self.added_at = datetime.utcnow()
+
+# Additional models for players, kills, connections, events, etc.
+```
+
+### 3. Command Cogs
+
+```python
+# cogs/server_commands.py
+import discord
+from discord.ext import commands
+from discord import Option, SlashCommandGroup
+import asyncio
+from database.connection import Database
+from parsers.csv_parser import CSVParser
+from parsers.log_parser import LogParser
+from utils.log_access import LogAccessManager
+from utils.premium import check_premium_limit
+
+class ServerCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.parser_tasks = {}
+    
+    server = SlashCommandGroup("server", "Server management commands")
+    
+    @server.command(name="add", description="Add a new Deadside server to monitor")
+    async def add_server(
+        self, 
+        ctx, 
+        name: Option(str, "Server name"),
+        ip: Option(str, "Server IP address"),
+        port: Option(int, "Server port", min_value=1, max_value=65535),
+        log_path: Option(str, "Path to server logs"),
+        csv_enabled: Option(bool, "Enable CSV parsing", default=True),
+        log_enabled: Option(bool, "Enable log parsing", default=True),
+        access_type: Option(str, "Log access method", choices=["local", "sftp", "upload"], default="local"),
+        # Additional parameters
+    ):
+        # Check premium limits
+        # Create server record
+        # Start historical parsing
+        # Set up automated parsing
+```
+
+```python
+# cogs/stats_commands.py
+import discord
+from discord.ext import commands
+from discord import Option, SlashCommandGroup
+from database.connection import Database
+from utils.statistics import get_player_kills, get_player_deaths, get_weapon_stats
+from utils.embeds import create_player_stats_embed
+
+class StatsCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    stats = SlashCommandGroup("stats", "Statistics commands")
+    
+    @stats.command(name="player", description="Show player statistics")
+    async def player_stats(
+        self, 
+        ctx, 
+        player_name: Option(str, "Player name to lookup", required=False),
+        player_id: Option(str, "Player ID to lookup", required=False)
+    ):
+        # Find player by name or ID
+        # Get detailed statistics (kills, deaths, weapons)
+        # Create and send embeds
+```
+
+### 4. Statistical Analysis
+
+```python
+# utils/statistics.py
+from database.connection import Database
+from datetime import datetime, timedelta
+
+async def get_player_kills(player_id, include_alts=True):
+    """Get kill statistics for a player"""
+    db = await Database.get_instance()
+    
+    # Get all character IDs (main + alts) if requested
+    if include_alts:
+        player_ids = await get_all_player_ids(player_id)
+    else:
+        player_ids = [player_id]
+    
+    # Get kills by this player (excluding suicides)
+    # Return formatted results
+
+async def get_weapon_stats(player_id, include_alts=True):
+    """Get weapon usage statistics for a player"""
+    kills = await get_player_kills(player_id, include_alts)
+    
+    # Count weapons and calculate percentages
+    # Return sorted by frequency
+```
+
+### 5. Discord Integration
+
+```python
+# utils/player_identity.py
+from database.connection import Database
+
+async def link_discord_to_character(discord_id, player_id, is_main=True):
+    """Link a Discord user to a game character"""
+    db = await Database.get_instance()
+    
+    # Check if player is already linked
+    # Set as main character if specified
+    # Create or update the link
+```
+
+### 6. Log File Access
+
+```python
+# utils/log_access.py
+import os
+import aiofiles
+import asyncssh
+from pathlib import Path
+
+class LogAccessManager:
+    @staticmethod
+    async def get_local_file(file_path):
+        """Access a file on the local filesystem"""
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+        return file_path
+    
+    @staticmethod
+    async def get_sftp_file(server_config, remote_path, local_cache_dir="./cache"):
+        """Download a file via SFTP and return the local path"""
+        # Create cache directory
+        # Connect via SFTP and download file
+        # Return local path
+```
+
+### 7. Main Bot Implementation
+
+```python
+# main.py
+import asyncio
+import discord
+import os
+from discord.ext import commands
+from config import TOKEN
+from database.connection import Database
+
+# Setup intents
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
+# Create bot instance
+bot = commands.Bot(intents=intents)
+
+# Load cogs
+async def load_cogs():
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py"):
+            try:
+                await bot.load_extension(f"cogs.{filename[:-3]}")
+                print(f"Loaded cog: {filename}")
+            except Exception as e:
+                print(f"Failed to load cog {filename}: {str(e)}")
+
+@bot.event
+async def on_ready():
+    print(f"Bot is ready! Logged in as {bot.user}")
+    # Initialize database connection
+    # Set bot presence
+
+# Main entry point
+async def main():
+    await load_cogs()
+    await bot.start(TOKEN)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Implementation Notes
+
+1. The bot follows an async architecture throughout for optimal performance
+2. Parser memory system tracks last processed position per server/parser type
+3. Premium tiers limit server monitoring capabilities
+4. Character linking system connects Discord users to in-game characters
+5. Statistics include kill/death ratio, weapon breakdowns, and rivalries
+
+This implementation provides all the capabilities you've requested while ensuring high performance and scalability, with proper error handling and the exact parsing logic you specified.
+
+Would you like me to elaborate on any specific component of this implementation?

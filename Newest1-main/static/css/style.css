@@ -1,0 +1,75 @@
+/* Custom styles for Deadside Bot Dashboard */
+
+/* Add some padding to the body */
+body {
+    padding-bottom: 70px;
+}
+
+/* Make the footer stick to the bottom */
+.footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    z-index: 1000;
+}
+
+/* Add some spacing to cards */
+.card {
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    font-weight: 500;
+}
+
+/* Style for stats page progress bars */
+.progress {
+    height: 25px;
+    font-weight: bold;
+}
+
+/* Custom styles for tables */
+.table {
+    vertical-align: middle;
+}
+
+/* Style for form controls */
+.form-control, .form-select {
+    margin-bottom: 10px;
+}
+
+/* Style for badges */
+.badge {
+    font-size: 0.8rem;
+}
+
+/* Style for list groups */
+.list-group-item {
+    border-left: none;
+    border-right: none;
+}
+
+/* Hover effects */
+.btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    transition: all 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    transition: all 0.3s;
+}
+
+/* Responsive adjustments */
+@media (max-width: 767.98px) {
+    .card-title {
+        font-size: 1.1rem;
+    }
+    
+    .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+}
