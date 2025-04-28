@@ -444,7 +444,9 @@ def register_commands():
     ]
     
     # Register the commands
-    logger.info(f"Registering {len(commands)} global commands...")
+    # We're going to use a more efficient approach by registering all at once
+    
+    logger.info(f"Registering all {len(commands)} global commands in a single request...")
     
     headers = {
         "Authorization": f"Bot {TOKEN}",
@@ -453,60 +455,46 @@ def register_commands():
     
     url = f"{API_BASE}/applications/{APPLICATION_ID}/commands"
     
+    # Just register all commands in one go using PUT
+    # This replaces all existing commands with the new set, avoiding the need to clear first
     try:
-        # Use a cleaner approach that clears first, then adds new commands
-        # Clear existing commands first
-        response = requests.put(url, headers=headers, json=[])
+        # Register all commands in a single bulk request
+        response = requests.put(url, headers=headers, json=commands)
         
         if response.status_code == 429:
             # Handle rate limit
-            retry_after = response.json().get("retry_after", 60)
+            retry_data = response.json()
+            retry_after = retry_data.get("retry_after", 60)
             logger.warning(f"Rate limited! Waiting {retry_after} seconds before retry...")
             
             # Sleep and try again
             import time
-            time.sleep(int(retry_after) + 1)
+            time.sleep(float(retry_after) + 1)
             
-            # Try clearing again
-            response = requests.put(url, headers=headers, json=[])
+            # Try again
+            response = requests.put(url, headers=headers, json=commands)
         
-        if response.status_code not in (200, 201):
-            logger.error(f"Failed to clear commands: {response.status_code}")
-            logger.error(response.text)
-            return
+        if response.status_code in (200, 201):
+            logger.info("✅ Successfully registered all commands in a single request!")
             
-        logger.info("Successfully cleared all existing commands")
-        
-        # Wait a moment to avoid rate limits
-        import time
-        time.sleep(2)
-        
-        # Now register new commands
-        # We'll do this one at a time to avoid hitting Discord's size limits
-        for i, command in enumerate(commands):
-            command_name = command.get("name", f"Command #{i+1}")
-            logger.info(f"Registering command: {command_name}")
-            
-            command_response = requests.post(url, headers=headers, json=command)
-            
-            if command_response.status_code == 429:
-                # Handle rate limit
-                retry_data = command_response.json()
-                retry_after = retry_data.get("retry_after", 60)
-                logger.warning(f"Rate limited when registering {command_name}! Waiting {retry_after} seconds...")
+            # Log the registered commands
+            registered = response.json()
+            logger.info(f"Registered {len(registered)} commands with Discord:")
+            for cmd in registered:
+                name = cmd.get("name", "Unknown")
+                cmd_type = cmd.get("type", 1)
                 
-                # Sleep and try again
-                time.sleep(int(retry_after) + 1)
-                command_response = requests.post(url, headers=headers, json=command)
-            
-            if command_response.status_code in (200, 201):
-                logger.info(f"✅ Successfully registered command: {command_name}")
-            else:
-                logger.error(f"❌ Failed to register command {command_name}: {command_response.status_code}")
-                logger.error(command_response.text)
-            
-            # Wait between commands to avoid rate limits
-            time.sleep(2)
+                if cmd.get("options"):
+                    subcmds = [opt.get("name") for opt in cmd.get("options") if opt.get("type") == 1]
+                    if subcmds:
+                        logger.info(f"• Command Group '{name}' with subcommands: {', '.join(subcmds)}")
+                    else:
+                        logger.info(f"• Command '{name}'")
+                else:
+                    logger.info(f"• Command '{name}'")
+        else:
+            logger.error(f"❌ Failed to register commands: {response.status_code}")
+            logger.error(response.text)
         
         logger.info("Command registration complete!")
         logger.info("Note: It may take up to an hour for commands to appear in Discord")
