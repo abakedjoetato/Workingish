@@ -3,176 +3,108 @@ Minimal direct command registration script - registers only the most essential c
 """
 
 import os
-import logging
+import sys
+import json
+import time
 import requests
 from dotenv import load_dotenv
-
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-)
-logger = logging.getLogger("command_registrar")
 
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-if not TOKEN:
-    logger.error("DISCORD_TOKEN not found in environment variables")
-    exit(1)
-
-# Discord API endpoints
-API_BASE = "https://discord.com/api/v10"
-APPLICATION_ID = None  # Will be retrieved from API
-
-
 def get_application_id():
     """Get the application ID using the bot token"""
-    headers = {"Authorization": f"Bot {TOKEN}"}
+    headers = {
+        "Authorization": f"Bot {TOKEN}"
+    }
     
-    response = requests.get(f"{API_BASE}/users/@me", headers=headers)
+    response = requests.get(
+        "https://discord.com/api/v10/applications/@me",
+        headers=headers
+    )
+    
     if response.status_code != 200:
-        logger.error(f"Failed to get application info: {response.status_code}")
-        logger.error(response.text)
+        print(f"Error retrieving application ID: {response.status_code}")
+        print(response.text)
         return None
-        
-    application_id = response.json().get("id")
-    logger.info(f"Retrieved application ID: {application_id}")
-    return application_id
-
+    
+    data = response.json()
+    return data["id"]
 
 def register_commands():
     """Register only the most essential slash commands directly with Discord API"""
-    global APPLICATION_ID
+    if not TOKEN:
+        print("Error: DISCORD_TOKEN not found in environment variables")
+        return False
     
-    # Get application ID if not already set
-    if not APPLICATION_ID:
-        APPLICATION_ID = get_application_id()
-        if not APPLICATION_ID:
-            logger.error("Could not retrieve application ID. Exiting.")
-            return
+    # Get application ID
+    application_id = get_application_id()
+    if not application_id:
+        print("Could not retrieve application ID. Exiting.")
+        return False
     
-    # Define minimal core commands - only use the ones that actually matter
+    # Minimal commands to register
     commands = [
-        # Root ping command - good for testing the bot is alive
+        # Add ping command
         {
             "name": "ping",
             "description": "Check the bot's response time",
-            "type": 1  # CHAT_INPUT
+            "type": 1
         },
         
-        # Server stats command group with subcommands
+        # Add commands menu
         {
-            "name": "stats",
-            "description": "View player and server statistics",
-            "type": 1,  # CHAT_INPUT
-            "options": [
-                {
-                    "name": "player",
-                    "description": "View detailed statistics for a player",
-                    "type": 1,  # Subcommand
-                    "options": [
-                        {
-                            "name": "name",
-                            "description": "Player name to search for",
-                            "type": 3,  # STRING
-                            "required": True
-                        }
-                    ]
-                },
-                {
-                    "name": "me",
-                    "description": "View your own player statistics",
-                    "type": 1  # Subcommand
-                },
-                {
-                    "name": "leaderboard",
-                    "description": "View player leaderboard",
-                    "type": 1  # Subcommand
-                }
-            ]
-        },
-        
-        # Server command group
-        {
-            "name": "server",
-            "description": "Manage game server connections and settings",
-            "type": 1,  # CHAT_INPUT
-            "options": [
-                {
-                    "name": "list",
-                    "description": "List all configured servers",
-                    "type": 1  # Subcommand
-                },
-                {
-                    "name": "status",
-                    "description": "Check the online status and player count of a server",
-                    "type": 1  # Subcommand
-                }
-            ]
-        },
-        
-        # Missions command group (minimal options)
-        {
-            "name": "missions",
-            "description": "View server missions and events",
-            "type": 1,  # CHAT_INPUT
-            "options": [
-                {
-                    "name": "list",
-                    "description": "List recent server events",
-                    "type": 1  # Subcommand
-                }
-            ]
+            "name": "commands",
+            "description": "Interactive command guide with detailed information",
+            "type": 1
         }
     ]
     
-    # Register the commands
-    logger.info(f"Registering {len(commands)} essential commands...")
+    # Set up Discord API request
+    url = f"https://discord.com/api/v10/applications/{application_id}/commands"
     
     headers = {
         "Authorization": f"Bot {TOKEN}",
         "Content-Type": "application/json"
     }
     
-    url = f"{API_BASE}/applications/{APPLICATION_ID}/commands"
-    
-    try:
-        # Register commands directly via PUT (replaces all existing commands)
-        response = requests.put(url, headers=headers, json=commands)
+    # Register commands
+    for command in commands:
+        command_name = command["name"]
         
-        if response.status_code == 429:
-            # Handle rate limit
-            retry_after = response.json().get("retry_after", 60)
-            logger.warning(f"Rate limited! Waiting {retry_after} seconds before retry...")
+        try:
+            response = requests.post(
+                url,
+                headers=headers,
+                json=command
+            )
             
-            # Sleep and try again
-            import time
-            time.sleep(float(retry_after) + 1)
+            if response.status_code == 429:  # Rate limit
+                retry_after = response.json().get("retry_after", 60)
+                print(f"Rate limited when registering {command_name}, retrying after {retry_after}s")
+                time.sleep(retry_after + 1)  # Add 1s buffer
+                
+                # Try again after waiting
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=command
+                )
             
-            # Try again
-            response = requests.put(url, headers=headers, json=commands)
-        
-        if response.status_code in (200, 201):
-            logger.info("✅ Successfully registered essential commands!")
+            if response.status_code in (200, 201):
+                print(f"Successfully registered command: {command_name}")
+            else:
+                print(f"Error registering command {command_name}: {response.status_code}")
+                print(response.text)
+                
+        except Exception as e:
+            print(f"Exception when registering command {command_name}: {e}")
             
-            # Log the registered commands
-            registered = response.json()
-            logger.info(f"Registered {len(registered)} commands with Discord:")
-            for cmd in registered:
-                name = cmd.get("name", "Unknown")
-                logger.info(f"• Command registered: {name}")
-        else:
-            logger.error(f"❌ Failed to register commands: {response.status_code}")
-            logger.error(response.text)
-        
-        logger.info("Command registration complete!")
-        logger.info("Note: It may take up to an hour for commands to appear in Discord")
-        
-    except Exception as e:
-        logger.error(f"Error registering commands: {str(e)}")
-
+    print("Command registration complete. Check Discord after a few minutes.")
+    print("Note: It may take up to an hour for commands to appear due to Discord's caching.")
+    return True
 
 if __name__ == "__main__":
+    print("Starting minimal command registration")
     register_commands()

@@ -25,6 +25,10 @@ class ServerCommands(commands.Cog):
             self.db = self.bot.db
             logger.debug("Set database for ServerCommands cog from bot")
     
+    # This function is needed to expose the commands to the bot
+    def get_commands(self):
+        return [self.server]
+    
     @commands.group(name="server", invoke_without_command=True)
     @commands.has_permissions(manage_guild=True)
     async def server(self, ctx):

@@ -62,13 +62,69 @@ class StatsCommands(commands.Cog):
                 # Get additional stats
                 player_stats = await self.get_player_extended_stats(db, player.player_id)
                 
-                # Create and send embed
+                # Check if this is a main or alt character and modify display accordingly
                 embed = await create_player_stats_embed(player, player_stats)
-                await ctx.send(embed=embed)
+                
+                # Check if this player is a main character (has alts)
+                if hasattr(player, 'alt_player_ids') and player.alt_player_ids:
+                    # This is a main character, get its alts
+                    alt_names = []
+                    alt_kills = 0
+                    alt_deaths = 0
+                    
+                    for alt_id in player.alt_player_ids:
+                        alt_data = await collection.find_one({"_id": ObjectId(alt_id)})
+                        if alt_data:
+                            alt_player = Player(**{**alt_data, "_id": alt_data["_id"]})
+                            alt_names.append(alt_player.player_name)
+                            alt_kills += alt_player.total_kills
+                            alt_deaths += alt_player.total_deaths
+                    
+                    # Update the embed title to show this is a main character
+                    embed.title = f"🌟 {player.player_name} (Main Character)"
+                    
+                    # Add alt characters field
+                    if alt_names:
+                        embed.add_field(
+                            name="Alt Characters", 
+                            value=", ".join(alt_names),
+                            inline=False
+                        )
+                        
+                        # Calculate combined stats
+                        total_kills = player.total_kills + alt_kills
+                        total_deaths = player.total_deaths + alt_deaths
+                        kd_ratio = total_kills / max(1, total_deaths)
+                        
+                        embed.add_field(
+                            name="Combined Stats (All Characters)",
+                            value=f"Kills: **{total_kills}**\n" +
+                                  f"Deaths: **{total_deaths}**\n" +
+                                  f"K/D Ratio: **{kd_ratio:.2f}**",
+                            inline=False
+                        )
+                        
+                # Check if this player is an alt character (has a main)
+                elif hasattr(player, 'main_player_id') and player.main_player_id:
+                    # This is an alt character, get its main
+                    main_data = await collection.find_one({"_id": ObjectId(player.main_player_id)})
+                    if main_data:
+                        main_player = Player(**{**main_data, "_id": main_data["_id"]})
+                        
+                        # Update the embed to show this is an alt character
+                        embed.title = f"{player.player_name} (Alt of {main_player.player_name})"
+                        
+                        embed.add_field(
+                            name="Main Character",
+                            value=f"{main_player.player_name}",
+                            inline=False
+                        )
+                
+                await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error getting player stats: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @stats_group.command(name="me", description="View your own statistics if linked to a player")
     async def my_stats(self, ctx):
@@ -83,13 +139,88 @@ class StatsCommands(commands.Cog):
                 await ctx.respond("⚠️ Your Discord account is not linked to any players. Use `/stats link <player_name>` to link your account.")
                 return
             
-            # Process each linked player
+            # Find main characters first
+            mains = []
+            alts = []
+            standalone = []
+            
             for player in players:
+                # Check if this player is a main (has alts)
+                has_alts = hasattr(player, 'alt_player_ids') and player.alt_player_ids
+                # Check if this player is an alt (has a main)
+                has_main = hasattr(player, 'main_player_id') and player.main_player_id
+                
+                if has_alts:
+                    mains.append(player)
+                elif has_main:
+                    alts.append(player)
+                else:
+                    standalone.append(player)
+            
+            # Display main characters first with combined stats
+            for main in mains:
+                # Get additional stats for main
+                main_stats = await self.get_player_extended_stats(db, main.player_id)
+                
+                # Get all alts of this main
+                character_alts = []
+                total_kills = main.total_kills
+                total_deaths = main.total_deaths
+                
+                if hasattr(main, 'alt_player_ids') and main.alt_player_ids:
+                    for alt_id in main.alt_player_ids:
+                        alt_player = next((p for p in players if str(p._id) == alt_id), None)
+                        if alt_player:
+                            character_alts.append(alt_player)
+                            total_kills += alt_player.total_kills
+                            total_deaths += alt_player.total_deaths
+                
+                # Create combined stats embed
+                embed = await create_player_stats_embed(main, main_stats)
+                
+                # Modify embed to show this is a main character
+                embed.title = f"🌟 {main.player_name} (Main Character)"
+                
+                # Add combined stats if there are alts
+                if character_alts:
+                    kd_ratio = total_kills / max(1, total_deaths)
+                    
+                    alt_names = [alt.player_name for alt in character_alts]
+                    embed.add_field(
+                        name="Alt Characters",
+                        value=", ".join(alt_names),
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="Combined Stats (All Characters)",
+                        value=f"Kills: **{total_kills}**\n" +
+                              f"Deaths: **{total_deaths}**\n" +
+                              f"K/D Ratio: **{kd_ratio:.2f}**",
+                        inline=False
+                    )
+                
+                embed.set_footer(text="Use /stats linkalt to connect more alt characters to your main")
+                await ctx.respond(embed=embed)
+            
+            # Skip alts since they're shown with the main
+            
+            # Show standalone characters
+            for player in standalone:
                 # Get additional stats
                 player_stats = await self.get_player_extended_stats(db, player.player_id)
                 
                 # Create and send embed
                 embed = await create_player_stats_embed(player, player_stats)
+                
+                # Add note about setting as main
+                embed.add_field(
+                    name="Character Management",
+                    value=f"Make this your main: `/stats setmain {player.player_name}`\n" +
+                          f"Use main characters to track stats across multiple alts.",
+                    inline=False
+                )
+                
                 await ctx.respond(embed=embed)
                 
         except Exception as e:
@@ -183,22 +314,75 @@ class StatsCommands(commands.Cog):
                 
                 # Update player to remove Discord ID
                 player_to_unlink.discord_id = None
+                
+                # Also remove any main/alt relationships
+                player_collection = await db.get_collection("players")
+                await player_collection.update_one(
+                    {"_id": player_to_unlink._id},
+                    {"$unset": {"main_player_id": "", "alt_player_ids": ""}}
+                )
+                
+                # Remove this player from other characters' alt lists
+                await player_collection.update_many(
+                    {"alt_player_ids": {"$in": [str(player_to_unlink._id)]}},
+                    {"$pull": {"alt_player_ids": str(player_to_unlink._id)}}
+                )
+                
                 await player_to_unlink.update(db)
                 
                 await ctx.respond(f"✅ Successfully unlinked character '{player_to_unlink.player_name}' from your Discord account.")
             else:
-                # Show all linked characters
+                # Show all linked characters with main/alt relationships
                 embed = discord.Embed(
                     title="Your Linked Characters",
                     description=f"You have {len(players)} linked character(s)",
                     color=0x50C878  # Emerald green
                 )
                 
+                # Group characters by main/alt relationship
+                mains = []
+                alts = []
+                standalone = []
+                
                 for player in players:
+                    # Check if this player is a main (has alts)
+                    has_alts = hasattr(player, 'alt_player_ids') and player.alt_player_ids
+                    # Check if this player is an alt (has a main)
+                    has_main = hasattr(player, 'main_player_id') and player.main_player_id
+                    
+                    if has_alts:
+                        mains.append(player)
+                    elif has_main:
+                        alts.append(player)
+                    else:
+                        standalone.append(player)
+                
+                # Add main characters first with their alts
+                for main in mains:
+                    # Get alt names if available
+                    alt_names = []
+                    if hasattr(main, 'alt_player_ids') and main.alt_player_ids:
+                        for alt_id in main.alt_player_ids:
+                            alt_player = next((p for p in players if str(p._id) == alt_id), None)
+                            if alt_player:
+                                alt_names.append(alt_player.player_name)
+                    
+                    alt_list = f"\nAlts: {', '.join(alt_names)}" if alt_names else ""
+                    
+                    embed.add_field(
+                        name=f"🌟 {main.player_name} (Main)",
+                        value=f"Kills: {main.total_kills}\nDeaths: {main.total_deaths}{alt_list}\n" +
+                              f"Unlink: `/stats unlink {main.player_name}`",
+                        inline=False
+                    )
+                
+                # Add standalone characters
+                for player in standalone:
                     embed.add_field(
                         name=player.player_name,
                         value=f"Kills: {player.total_kills}\nDeaths: {player.total_deaths}\n" +
-                              f"Unlink: `/stats unlink {player.player_name}`",
+                              f"Unlink: `/stats unlink {player.player_name}`\n" +
+                              f"Make main: `/stats setmain {player.player_name}`",
                         inline=True
                     )
                 
@@ -207,6 +391,217 @@ class StatsCommands(commands.Cog):
                 
         except Exception as e:
             logger.error(f"Error unlinking player: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
+    
+    @stats_group.command(name="setmain", description="Set one of your characters as your main character")
+    async def set_main_character(self, ctx,
+                               player_name: discord.Option(str, "Name of character to set as your main", required=True)):
+        """
+        Designate one of your linked characters as your main character
+        
+        Usage: /stats setmain <player_name>
+        
+        Setting a main character allows you to link alt characters to it.
+        This is useful for tracking combined statistics across all your characters.
+        """
+        try:
+            db = await Database.get_instance()
+            
+            # Get all linked players first
+            players = await Player.get_by_discord_id(db, str(ctx.author.id))
+            
+            if not players:
+                await ctx.respond("❓ You don't have any linked characters. Use `/stats link <player_name>` first.")
+                return
+                
+            # Find the specific player to set as main
+            player_to_set = next((p for p in players if p.player_name.lower() == player_name.lower()), None)
+            
+            if not player_to_set:
+                await ctx.respond(f"⚠️ You don't have a character named '{player_name}' linked to your account.")
+                return
+            
+            # Check if this player is already an alt of another character
+            if hasattr(player_to_set, 'main_player_id') and player_to_set.main_player_id:
+                # Find the main player
+                player_collection = await db.get_collection("players")
+                main_data = await player_collection.find_one({"_id": ObjectId(player_to_set.main_player_id)})
+                
+                if main_data:
+                    main_player = Player(**{**main_data, "_id": main_data["_id"]})
+                    await ctx.respond(f"⚠️ '{player_name}' is already an alt of '{main_player.player_name}'. "
+                                     f"You must first unlink it using `/stats unlink {player_name}`.")
+                    return
+            
+            # Get current main characters
+            mains = [p for p in players if hasattr(p, 'alt_player_ids') and p.alt_player_ids]
+            
+            # If we already have another main, ask for confirmation
+            if mains and str(mains[0]._id) != str(player_to_set._id):
+                # There's another main already, clear its alt list
+                player_collection = await db.get_collection("players")
+                for main in mains:
+                    # Reset the old main's alt list
+                    await player_collection.update_one(
+                        {"_id": main._id},
+                        {"$unset": {"alt_player_ids": ""}}
+                    )
+            
+            # Set this player as a main (with empty alt list to start)
+            player_collection = await db.get_collection("players")
+            await player_collection.update_one(
+                {"_id": player_to_set._id},
+                {"$set": {"alt_player_ids": []}, "$unset": {"main_player_id": ""}}
+            )
+            
+            # Create confirmation embed
+            embed = discord.Embed(
+                title="Main Character Set",
+                description=f"**{player_to_set.player_name}** is now your main character",
+                color=0x50C878  # Emerald green
+            )
+            
+            embed.add_field(
+                name="What This Means",
+                value="You can now link your alt characters to this main character\n" +
+                      "This helps with tracking your combined statistics",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Next Steps",
+                value="Use `/stats linkalt <alt_name>` to link your alt characters to this main",
+                inline=False
+            )
+            
+            await ctx.respond(embed=embed)
+                
+        except Exception as e:
+            logger.error(f"Error setting main character: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
+    
+    @stats_group.command(name="linkalt", description="Link an alt character to your main character")
+    async def link_alt_character(self, ctx,
+                               alt_name: discord.Option(str, "Name of character to set as an alt", required=True)):
+        """
+        Link an alt character to your main character
+        
+        Usage: /stats linkalt <alt_name>
+        
+        The character must already be linked to your Discord account.
+        You must have already set a main character using /stats setmain.
+        """
+        try:
+            db = await Database.get_instance()
+            
+            # Get all linked players first
+            players = await Player.get_by_discord_id(db, str(ctx.author.id))
+            
+            if not players:
+                await ctx.respond("❓ You don't have any linked characters. Use `/stats link <player_name>` first.")
+                return
+            
+            # Find the alt to link
+            alt_player = next((p for p in players if p.player_name.lower() == alt_name.lower()), None)
+            
+            if not alt_player:
+                await ctx.respond(f"⚠️ You don't have a character named '{alt_name}' linked to your account.")
+                return
+            
+            # Check if this player is already an alt
+            if hasattr(alt_player, 'main_player_id') and alt_player.main_player_id:
+                # Find the main player
+                player_collection = await db.get_collection("players")
+                main_data = await player_collection.find_one({"_id": ObjectId(alt_player.main_player_id)})
+                
+                if main_data:
+                    main_player = Player(**{**main_data, "_id": main_data["_id"]})
+                    await ctx.respond(f"⚠️ '{alt_name}' is already an alt of '{main_player.player_name}'.")
+                    return
+            
+            # Find main character
+            mains = [p for p in players if hasattr(p, 'alt_player_ids') and p.alt_player_ids]
+            
+            if not mains:
+                await ctx.respond("⚠️ You haven't set a main character yet. Use `/stats setmain <name>` first.")
+                return
+            
+            main_player = mains[0]
+            
+            # Don't allow linking the main as its own alt
+            if str(main_player._id) == str(alt_player._id):
+                await ctx.respond("⚠️ You can't link your main character as an alt of itself.")
+                return
+            
+            # Update main player to add this alt to its list
+            player_collection = await db.get_collection("players")
+            
+            # Check if alt_player_ids exists, if not create it
+            if not hasattr(main_player, 'alt_player_ids'):
+                await player_collection.update_one(
+                    {"_id": main_player._id},
+                    {"$set": {"alt_player_ids": []}}
+                )
+                main_player.alt_player_ids = []
+            
+            # Add alt to main's alt list if not already present
+            if str(alt_player._id) not in main_player.alt_player_ids:
+                await player_collection.update_one(
+                    {"_id": main_player._id},
+                    {"$push": {"alt_player_ids": str(alt_player._id)}}
+                )
+            
+            # Mark alt as belonging to main
+            await player_collection.update_one(
+                {"_id": alt_player._id},
+                {"$set": {"main_player_id": str(main_player._id)}}
+            )
+            
+            # Create confirmation embed
+            embed = discord.Embed(
+                title="Alt Character Linked",
+                description=f"**{alt_player.player_name}** is now linked as an alt of **{main_player.player_name}**",
+                color=0x50C878  # Emerald green
+            )
+            
+            # Calculate combined stats
+            total_kills = main_player.total_kills
+            total_deaths = main_player.total_deaths
+            
+            # Include this alt's stats
+            total_kills += alt_player.total_kills
+            total_deaths += alt_player.total_deaths
+            
+            # Include other alts' stats if any
+            for alt_id in main_player.alt_player_ids:
+                if alt_id != str(alt_player._id):  # Skip the one we just added
+                    other_alt = next((p for p in players if str(p._id) == alt_id), None)
+                    if other_alt:
+                        total_kills += other_alt.total_kills
+                        total_deaths += other_alt.total_deaths
+            
+            # Calculate K/D ratio
+            kd_ratio = total_kills / max(1, total_deaths)
+            
+            embed.add_field(
+                name="Combined Statistics",
+                value=f"Kills: **{total_kills}**\n" +
+                      f"Deaths: **{total_deaths}**\n" +
+                      f"K/D Ratio: **{kd_ratio:.2f}**",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Character Management",
+                value="Use `/stats me` to see all your linked characters\n" +
+                      f"Use `/stats unlink {alt_name}` to remove this alt link",
+                inline=False
+            )
+            
+            await ctx.respond(embed=embed)
+                
+        except Exception as e:
+            logger.error(f"Error linking alt character: {e}")
             await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @stats_group.command(name="server", description="View statistics for a server")
@@ -228,7 +623,7 @@ class StatsCommands(commands.Cog):
                 server = next((s for s in servers if s.name.lower() == server_name.lower()), None)
                 
                 if not server:
-                    await ctx.send(f"⚠️ Server '{server_name}' not found. Use `!server list` to see all configured servers.")
+                    await ctx.respond(f"⚠️ Server '{server_name}' not found. Use `/server list` to see all configured servers.")
                     return
                 
                 # Get server stats
@@ -236,13 +631,13 @@ class StatsCommands(commands.Cog):
                 
                 # Create and send embed
                 embed = await create_server_stats_embed(server, server_stats)
-                await ctx.send(embed=embed)
+                await ctx.respond(embed=embed)
             else:
                 # Get stats for all servers in this guild
                 servers = await Server.get_by_guild(db, ctx.guild.id)
                 
                 if not servers:
-                    await ctx.send("No servers have been configured yet. Use `!server add` to add a server.")
+                    await ctx.respond("No servers have been configured yet. Use `/server add` to add a server.")
                     return
                 
                 # Process each server
@@ -252,11 +647,11 @@ class StatsCommands(commands.Cog):
                     
                     # Create and send embed
                     embed = await create_server_stats_embed(server, server_stats)
-                    await ctx.send(embed=embed)
+                    await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error getting server stats: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @stats_group.command(name="leaderboard", description="View the leaderboard for a specific stat")
     async def leaderboard(self, ctx, 
@@ -273,7 +668,7 @@ class StatsCommands(commands.Cog):
         try:
             # Validate arguments
             if stat_type.lower() not in ["kills", "deaths", "kd"]:
-                await ctx.send("⚠️ Invalid stat type. Choose from: kills, deaths, kd")
+                await ctx.respond("⚠️ Invalid stat type. Choose from: kills, deaths, kd")
                 return
             
             # Limit the leaderboard size
@@ -287,7 +682,7 @@ class StatsCommands(commands.Cog):
             server_ids = [server._id for server in servers]
             
             if not server_ids:
-                await ctx.send("No servers have been configured yet. Use `!server add` to add a server.")
+                await ctx.respond("No servers have been configured yet. Use `/server add` to add a server.")
                 return
             
             # Build the leaderboard based on stat type
@@ -377,11 +772,11 @@ class StatsCommands(commands.Cog):
             # Set footer
             embed.set_footer(text=f"Use !stats player <name> for detailed player stats")
             
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error getting leaderboard: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     @stats_group.command(name="weapons", description="View weapon usage statistics")
     async def weapon_stats(self, ctx, 
@@ -402,7 +797,7 @@ class StatsCommands(commands.Cog):
             server_ids = [server._id for server in servers]
             
             if not server_ids:
-                await ctx.send("No servers have been configured yet. Use `!server add` to add a server.")
+                await ctx.respond("No servers have been configured yet. Use `/server add` to add a server.")
                 return
             
             if player_name:
@@ -414,7 +809,7 @@ class StatsCommands(commands.Cog):
                 players = await cursor.to_list(None)
                 
                 if not players:
-                    await ctx.send(f"⚠️ Player '{player_name}' not found. Names are case-sensitive.")
+                    await ctx.respond(f"⚠️ Player '{player_name}' not found. Names are case-sensitive.")
                     return
                 
                 player = Player(**{**players[0], "_id": players[0]["_id"]})
@@ -506,11 +901,11 @@ class StatsCommands(commands.Cog):
             # Set footer
             embed.set_footer(text=f"Use !stats player <name> for detailed player stats")
             
-            await ctx.send(embed=embed)
+            await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error getting weapon stats: {e}")
-            await ctx.send(f"⚠️ An error occurred: {e}")
+            await ctx.respond(f"⚠️ An error occurred: {e}")
     
     async def get_player_extended_stats(self, db, player_id):
         """Get extended statistics for a player"""

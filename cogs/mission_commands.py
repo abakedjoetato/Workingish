@@ -28,6 +28,10 @@ class MissionCommands(commands.Cog):
         """Called when the cog is loaded. Safe to use async code here."""
         # Start tracking after a short delay to ensure everything is ready
         self.bot.loop.create_task(self.initialize_mission_trackers())
+        
+    # This function is needed to expose the commands to the bot
+    def get_commands(self):
+        return [mission_group]
     
     async def initialize_mission_trackers(self):
         """Initialize mission trackers for all configured servers"""

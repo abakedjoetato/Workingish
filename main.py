@@ -368,6 +368,15 @@ async def sync_slash_commands():
     try:
         logger.info("📝 STARTING COMMAND REGISTRATION")
         
+        # Check if we can use the enhanced sync_retry module
+        try:
+            from utils.sync_retry import safe_command_sync
+            logger.info("Enhanced command sync available via sync_retry module")
+            use_enhanced_sync = True
+        except ImportError:
+            logger.warning("Enhanced command sync not available, falling back to standard approach")
+            use_enhanced_sync = False
+        
         # Import all command groups to make sure they're available
         logger.info("Step 1: Importing all command groups")
         from cogs.server_commands_slash import server_group 
@@ -657,15 +666,15 @@ async def ping(ctx):
     description="Interactive command guide with detailed information"
 )
 async def commands_menu(ctx):
-    """Shows available commands and help information with pagination"""
+    """Shows available commands and help information with emerald-themed styling"""
     # Get all registered commands
     all_commands = bot.application_commands
     
-    # Create main embed
+    # Create main embed with emerald-themed styling
     embed = discord.Embed(
-        title="📖 Deadside Bot Commands",
-        description="Here are all the available commands:",
-        color=discord.Color.dark_green()
+        title="🔸 Emerald PVP Command Guide 🔸",
+        description="Welcome to the Emerald Servers bot! Here are the commands to help you survive and thrive:",
+        color=0x2ecc71  # Emerald green color
     )
     
     # Add commands by category
@@ -696,58 +705,104 @@ async def commands_menu(ctx):
         else:
             utility_commands.append(cmd)
     
-    # Add fields for each category
+    # Add fields for each category with improved descriptions and subcommand hints
     if server_commands:
+        server_desc = (
+            "**`/server add`** - Add a new game server to track\n"
+            "**`/server list`** - View all configured servers\n"
+            "**`/server info`** - Get detailed server status\n"
+            "**`/server update`** - Modify server settings"
+        )
         embed.add_field(
             name="🖥️ Server Management",
-            value="Use `/server` commands to manage your game servers",
+            value=server_desc,
             inline=False
         )
     
     if stats_commands:
+        stats_desc = (
+            "**`/stats player`** - View detailed player statistics\n"
+            "**`/stats leaderboard`** - See the top players\n"
+            "**`/stats weapons`** - Analyze weapon performance\n"
+            "**`/stats link`** - Connect Discord to game identity"
+        )
         embed.add_field(
             name="📊 Player Statistics",
-            value="Use `/stats` commands to view player and server statistics",
+            value=stats_desc,
             inline=False
         )
     
     if mission_commands:
+        mission_desc = (
+            "**`/missions track`** - Follow mission status\n"
+            "**`/missions alerts`** - Set up mission notifications\n"
+            "**`/missions history`** - View past mission results"
+        )
         embed.add_field(
             name="🎯 Mission Tracking",
-            value="Use `/missions` commands to track in-game missions and events",
+            value=mission_desc,
             inline=False
         )
     
     if faction_commands:
+        faction_desc = (
+            "**`/faction create`** - Start a new faction\n"
+            "**`/faction join`** - Join an existing faction\n"
+            "**`/faction leaderboard`** - View top factions\n"
+            "**`/faction manage`** - Adjust faction settings"
+        )
         embed.add_field(
             name="👥 Faction System",
-            value="Use `/faction` commands to manage player groups",
+            value=faction_desc,
             inline=False
         )
     
     if connection_commands:
+        connection_desc = (
+            "**`/connections track`** - Monitor server logins\n"
+            "**`/connections alerts`** - Set up join/leave notifications\n"
+            "**`/connections history`** - View player session logs"
+        )
         embed.add_field(
             name="🔌 Connection Tracking",
-            value="Use `/connections` commands to monitor player connections",
+            value=connection_desc,
             inline=False
         )
     
     if killfeed_commands:
+        killfeed_desc = (
+            "**`/killfeed channel`** - Set a channel for kill notifications\n"
+            "**`/killfeed filter`** - Customize which kills to show\n"
+            "**`/killfeed highlights`** - Configure special death alerts"
+        )
         embed.add_field(
             name="💀 Killfeed",
-            value="Use `/killfeed` commands to set up death notifications",
+            value=killfeed_desc,
             inline=False
         )
     
+    # Add utilities with better formatting
     if utility_commands:
+        utility_desc = "\n".join([f"**`/{cmd.name}`** - {cmd.description}" for cmd in utility_commands])
         embed.add_field(
             name="🛠️ Utility Commands",
-            value="\n".join([f"`/{cmd.name}` - {cmd.description}" for cmd in utility_commands]),
+            value=utility_desc,
             inline=False
         )
     
-    # Footer with tip
-    embed.set_footer(text="Use '/help <command>' for detailed information on a specific command")
+    # Add premium tier information
+    embed.add_field(
+        name="💎 Premium Features",
+        value=(
+            "**Survivor (Free):** Basic tracking, 1 server\n"
+            "**Warlord (Premium):** Factions, rivalries, 3 servers\n"
+            "**Overseer (Enterprise):** All features, 10 servers"
+        ),
+        inline=False
+    )
+    
+    # Footer with styled tip
+    embed.set_footer(text="⚔️ Use the commands shown above to manage your Deadside experience")
     
     await ctx.respond(embed=embed)
 

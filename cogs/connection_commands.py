@@ -30,6 +30,10 @@ class ConnectionCommands(commands.Cog):
         """Called when the cog is loaded. Safe to use async code here."""
         # Start tracking after a short delay to ensure everything is ready
         self.bot.loop.create_task(self.initialize_connection_trackers())
+        
+    # This function is needed to expose the commands to the bot
+    def get_commands(self):
+        return [connection_group]
     
     async def initialize_connection_trackers(self):
         """Initialize connection trackers for all configured servers"""

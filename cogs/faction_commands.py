@@ -25,6 +25,10 @@ class FactionCommands(commands.Cog):
         """Called when the cog is loaded. Safe to use async code here."""
         logger.info("Faction commands cog loaded")
         
+    # This function is needed to expose the commands to the bot
+    def get_commands(self):
+        return [faction_group]
+        
     @faction_group.command(name="create", description="Create a new faction")
     async def create_faction(self, ctx, name: str, abbreviation: str):
         """
