@@ -16,7 +16,7 @@ async def get_premium_tiers():
         logger.error("PREMIUM_TIERS is not defined in config")
         # Provide fallback defaults to prevent NoneType errors
         return {
-            "free": {
+            "survivor": {
                 "max_servers": 1,
                 "historical_parsing": False,
                 "max_history_days": 0,
@@ -40,10 +40,21 @@ async def get_premium_limits(tier):
         tiers = await get_premium_tiers()
         
         # Ensure tier is a string and not None
-        tier_key = str(tier) if tier else "free"
+        tier_key = str(tier) if tier else "survivor"
         
-        # Return the specified tier or fall back to free
-        return tiers.get(tier_key, tiers.get("free", {}))
+        # Maps old tier names to new ones for backward compatibility
+        tier_mapping = {
+            "free": "survivor",
+            "premium": "warlord",
+            "enterprise": "overseer"
+        }
+        
+        # Use the new tier name if the old one was provided
+        if tier_key in tier_mapping:
+            tier_key = tier_mapping[tier_key]
+            
+        # Return the specified tier or fall back to survivor
+        return tiers.get(tier_key, tiers.get("survivor", {}))
     except Exception as e:
         logger.error(f"Error getting premium limits: {e}")
         # Return fallback defaults to prevent NoneType errors
@@ -73,13 +84,13 @@ async def get_guild_premium_tier(guild_id):
         if db is None:
             import logging
             logging.getLogger('deadside_bot.utils.premium').error("Database instance is None in get_guild_premium_tier")
-            return "free"
+            return "survivor"
             
-        # Home guild always has enterprise tier
+        # Home guild always has overseer tier (previously enterprise)
         try:
             is_home = await db.is_home_guild(guild_id)
             if is_home:
-                return "enterprise"
+                return "overseer"
         except Exception as e:
             import logging
             logging.getLogger('deadside_bot.utils.premium').error(f"Error checking home guild status: {e}")
@@ -91,11 +102,11 @@ async def get_guild_premium_tier(guild_id):
         except Exception as e:
             import logging
             logging.getLogger('deadside_bot.utils.premium').error(f"Error getting premium tier from db: {e}")
-            return "free"
+            return "survivor"
     except Exception as e:
         import logging
         logging.getLogger('deadside_bot.utils.premium').error(f"Unexpected error in get_guild_premium_tier: {e}")
-        return "free"
+        return "survivor"
 
 async def set_premium_tier(guild_id, tier, ctx=None):
     """
@@ -256,7 +267,7 @@ async def set_home_guild(guild_id, ctx=None):
             await db.set_home_guild_id(guild_id)
             
             if ctx:
-                await ctx.send(f"✅ Set guild {guild_id} as the home guild with enterprise premium tier.")
+                await ctx.send(f"✅ Set guild {guild_id} as the home guild with Overseer premium tier.")
             
             logger.info(f"Set guild {guild_id} as the home guild")
             return True

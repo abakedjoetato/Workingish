@@ -15,7 +15,7 @@ PARSER_INTERVAL = int(os.getenv("PARSER_INTERVAL", "300"))  # 5 minutes in secon
 
 # Default premium tiers
 PREMIUM_TIERS = {
-    "free": {
+    "survivor": {  # Renamed from "free"
         "max_servers": 1,
         "historical_parsing": False,
         "max_history_days": 0,
@@ -23,16 +23,16 @@ PREMIUM_TIERS = {
         "advanced_stats": False,
         "faction_system": False,
         "rivalry_tracking": False,
-        "connection_tracking": False,  # Changed to premium
+        "connection_tracking": False,
         "killfeed": True,
-        "basic_stats": False,  # Changed to premium
+        "basic_stats": False,
         "player_linking": True,
-        "mission_tracking": False,  # Changed to premium
+        "mission_tracking": False,
         "leaderboard": True,
         "csv_parsing": True,
         "log_parsing": True
     },
-    "premium": {
+    "warlord": {  # Renamed from "premium"
         "max_servers": 3,
         "historical_parsing": True,
         "max_history_days": 7,
@@ -49,7 +49,7 @@ PREMIUM_TIERS = {
         "csv_parsing": True,
         "log_parsing": True
     },
-    "enterprise": {
+    "overseer": {  # Renamed from "enterprise"
         "max_servers": 10,
         "historical_parsing": True,
         "max_history_days": 30,

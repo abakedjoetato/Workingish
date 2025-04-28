@@ -157,7 +157,7 @@ class AdminCommands(commands.Cog):
         
         Usage: !admin premium [guild_id] [tier]
         
-        Available tiers: free, premium, enterprise
+        Available tiers: survivor, warlord, overseer
         If no tier is provided, the current tier will be shown.
         If no guild_id is provided, the current guild will be used.
         
@@ -176,19 +176,19 @@ class AdminCommands(commands.Cog):
             if guild_id is None:
                 guild_id = ctx.guild.id
             
-            # If this is the home guild, always show enterprise tier
+            # If this is the home guild, always show overseer tier
             if await db.is_home_guild(guild_id):
                 if tier is not None:
-                    await ctx.send("⚠️ Home guild always has enterprise tier and cannot be changed.")
+                    await ctx.send("⚠️ Home guild always has Overseer tier and cannot be changed.")
                     return
                 
                 # Show home guild tier info
                 tiers = await get_premium_tiers()
-                limits = tiers.get("enterprise", {})
+                limits = tiers.get("overseer", {})
                 
                 embed = discord.Embed(
                     title="Premium Tier Information",
-                    description=f"Home Guild - Tier: **enterprise** ✅",
+                    description=f"Home Guild - Tier: **Overseer** ✅",
                     color=discord.Color.gold()
                 )
                 
