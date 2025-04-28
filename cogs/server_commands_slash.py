@@ -37,25 +37,70 @@ class ServerCommands(commands.Cog):
     def get_commands(self):
         return [server_group]
     
-    @server_group.command(name="add", description="Add a new server to monitor")
+    @server_group.command(
+        name="add", 
+        description="Add a new server to monitor",
+        options=[
+            discord.Option(
+                name="name",
+                description="A name for the server",
+                type=str,
+                required=True
+            ),
+            discord.Option(
+                name="host",
+                description="Server host/IP address",
+                type=str,
+                required=True
+            ),
+            discord.Option(
+                name="port",
+                description="Server port",
+                type=int,
+                required=True
+            ),
+            discord.Option(
+                name="server_id",
+                description="Server ID (used in log directory structure)",
+                type=str,
+                required=True
+            ),
+            discord.Option(
+                name="username",
+                description="Login username",
+                type=str,
+                required=True
+            ),
+            discord.Option(
+                name="password",
+                description="Login password",
+                type=str,
+                required=True
+            )
+        ]
+    )
     async def add_server(self, ctx,
-                       name: discord.Option(str, "A name for the server", required=True),
-                       host: discord.Option(str, "Server host/IP address", required=True),
-                       port: discord.Option(int, "Server port", required=True),
-                       server_id: discord.Option(str, "Server ID (used in log directory structure)", required=True),
-                       username: discord.Option(str, "Login username", required=True),
-                       password: discord.Option(str, "Login password", required=True)):
+                       name: str,
+                       host: str,
+                       port: int,
+                       server_id: str,
+                       username: str,
+                       password: str):
         """Add a new server to monitor"""
         try:
-            # Ensure we have a database instance
-            if not self.db:
-                logger.error("Database instance not available in add_server command")
+            # Always fetch the database instance directly from the bot, not from self
+            # This fixes the 'ApplicationContext' has no attribute 'db' error
+            if not hasattr(self.bot, 'db') or not self.bot.db:
+                logger.error("Bot database instance not available in add_server command")
                 await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
+                
+            # Use the bot's db instance directly
+            db = self.bot.db
             
             # Check if we have reached server limit
-            guild_config = await GuildConfig.get_or_create(self.db, ctx.guild.id)
-            existing_servers = await Server.get_by_guild(self.db, ctx.guild.id)
+            guild_config = await GuildConfig.get_or_create(db, ctx.guild.id)
+            existing_servers = await Server.get_by_guild(db, ctx.guild.id)
             
             # Import premium tier info
             from utils.premium import get_premium_limits
@@ -71,7 +116,7 @@ class ServerCommands(commands.Cog):
             root_log_path = f"{host}_{server_id}"
             
             # Create new server
-            server = await Server.create(self.db,
+            server = await Server.create(db,
                 name=name,
                 ip=host,
                 port=port,
@@ -84,9 +129,9 @@ class ServerCommands(commands.Cog):
             )
             
             # Disable auto-parsing initially while batch processing runs
-            auto_parser_state = await ParserState.get_or_create(self.db, server._id, "csv", False)
+            auto_parser_state = await ParserState.get_or_create(db, server._id, "csv", False)
             auto_parser_state.auto_parsing_enabled = False
-            await auto_parser_state.update(self.db)
+            await auto_parser_state.update(db)
             
             # Send initial response
             initial_message = await ctx.respond(f"✅ Server '{name}' added successfully! When connecting via SFTP, the system will:\n"
@@ -102,10 +147,10 @@ class ServerCommands(commands.Cog):
             import asyncio
             
             # Create progress embed
-            progress_memory = await ParserMemory.get_or_create(self.db, server._id, "batch_csv")
+            progress_memory = await ParserMemory.get_or_create(db, server._id, "batch_csv")
             progress_memory.status = "Initializing (starts in 30 seconds)"
             progress_memory.start_time = datetime.utcnow()
-            await progress_memory.update(self.db)
+            await progress_memory.update(db)
             
             embed = await create_batch_progress_embed(server.name, progress_memory)
             await message.edit(content="", embed=embed)
@@ -131,9 +176,14 @@ class ServerCommands(commands.Cog):
                     await batch_parser.parse_batch(server)
                     
                     # Re-enable auto parsing after batch processing completes
-                    auto_parser_state = await ParserState.get_or_create(self.db, server._id, "csv", False)
-                    auto_parser_state.auto_parsing_enabled = True
-                    await auto_parser_state.update(self.db)
+                    # Get database from bot since we're in a callback
+                    db = self.bot.db
+                    if db:
+                        auto_parser_state = await ParserState.get_or_create(db, server._id, "csv", False)
+                        auto_parser_state.auto_parsing_enabled = True
+                        await auto_parser_state.update(db)
+                    else:
+                        logger.error("Database not available in batch parser callback")
                     
                     logger.info(f"Batch processing completed for server {server.name}")
                 except Exception as e:
@@ -150,13 +200,16 @@ class ServerCommands(commands.Cog):
     async def list_servers(self, ctx):
         """List all configured servers for this guild"""
         try:
-            # Ensure we have a database instance
-            if not self.db:
-                logger.error("Database instance not available in list_servers command")
+            # Always fetch the database instance directly from the bot
+            if not hasattr(self.bot, 'db') or not self.bot.db:
+                logger.error("Bot database instance not available in list_servers command")
                 await ctx.respond("⚠️ Database connection not available. Please try again later.")
                 return
-                
-            servers = await Server.get_by_guild(self.db, ctx.guild.id)
+            
+            # Use the bot's db instance directly
+            db = self.bot.db
+            
+            servers = await Server.get_by_guild(db, ctx.guild.id)
             
             if not servers:
                 await ctx.respond("No servers have been configured yet. Use `/server add` to add a server.")
