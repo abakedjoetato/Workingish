@@ -76,66 +76,6 @@ class ServerCommands(commands.Cog):
                 description="Login password",
                 type=str,
                 required=True
-            ),
-            discord.Option(
-                name="game_port",
-                description="Game server port (default: 27015)",
-                type=int,
-                required=False
-            ),
-            discord.Option(
-                name="query_port",
-                description="Query port (default: same as game_port)",
-                type=int,
-                required=False
-            ),
-            discord.Option(
-                name="rcon_port",
-                description="RCON port (default: none)",
-                type=int,
-                required=False
-            ),
-            discord.Option(
-                name="rcon_password",
-                description="RCON password (optional)",
-                type=str,
-                required=False
-            ),
-            discord.Option(
-                name="ftp_host",
-                description="FTP host for log access (optional)",
-                type=str,
-                required=False
-            ),
-            discord.Option(
-                name="ftp_port",
-                description="FTP port (default: 21)",
-                type=int,
-                required=False
-            ),
-            discord.Option(
-                name="ftp_user",
-                description="FTP username (optional)",
-                type=str,
-                required=False
-            ),
-            discord.Option(
-                name="ftp_password",
-                description="FTP password (optional)",
-                type=str,
-                required=False
-            ),
-            discord.Option(
-                name="csv_path",
-                description="Path to CSV files on FTP server (optional)",
-                type=str,
-                required=False
-            ),
-            discord.Option(
-                name="log_path",
-                description="Path to log files on FTP server (optional)",
-                type=str,
-                required=False
             )
         ]
     )
@@ -145,17 +85,7 @@ class ServerCommands(commands.Cog):
                        port: int,
                        server_id: str,
                        username: str,
-                       password: str,
-                       game_port: int = None,
-                       query_port: int = None,
-                       rcon_port: int = None,
-                       rcon_password: str = None,
-                       ftp_host: str = None,
-                       ftp_port: int = None,
-                       ftp_user: str = None,
-                       ftp_password: str = None,
-                       csv_path: str = None,
-                       log_path: str = None):
+                       password: str):
         """Add a new server to monitor"""
         try:
             # Always fetch the database instance directly from the bot, not from self
@@ -185,26 +115,17 @@ class ServerCommands(commands.Cog):
             # The first directory is always {ip}_{ServerID}
             root_log_path = f"{host}_{server_id}"
             
-            # Create new server with all optional fields
+            # Create new server
             server = await Server.create(db,
                 name=name,
                 ip=host,
                 port=port,
                 server_id=server_id,
-                log_path=log_path or root_log_path,
+                log_path=root_log_path,
                 guild_id=ctx.guild.id,
                 access_method="sftp",
                 ssh_user=username,
-                ssh_password=password,
-                game_port=game_port,
-                query_port=query_port,
-                rcon_port=rcon_port,
-                rcon_password=rcon_password,
-                ftp_host=ftp_host,
-                ftp_port=ftp_port,
-                ftp_user=ftp_user,
-                ftp_password=ftp_password,
-                csv_path=csv_path
+                ssh_password=password
             )
             
             # Disable auto-parsing initially while batch processing runs
