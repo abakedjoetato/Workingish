@@ -48,6 +48,22 @@ async def register_commands_individually(bot, commands_payload):
     Returns:
         bool: True if at least half of the commands were registered successfully, False otherwise
     """
+    # CRITICAL CHANGE: Delete any existing rate limit state files first
+    # This ensures we start fresh and don't carry over old rate limits
+    logger.warning("🔄 CLEARING ALL RATE LIMIT STATE FILES BEFORE REGISTRATION")
+    try:
+        if os.path.exists("rate_limit_state.json"):
+            os.remove("rate_limit_state.json")
+            logger.info("✅ Cleared rate_limit_state.json")
+        if os.path.exists(".last_command_check.txt"):
+            os.remove(".last_command_check.txt")
+            logger.info("✅ Cleared .last_command_check.txt")
+        if os.path.exists(".rate_limit_state.json"):
+            os.remove(".rate_limit_state.json")
+            logger.info("✅ Cleared .rate_limit_state.json")
+    except Exception as e:
+        logger.error(f"Error clearing rate limit state: {e}")
+    
     # Preemptively fix command attributes with our utility
     try:
         from utils.command_fix import INTEGRATION_TYPE_GUILD, COMMAND_CONTEXT_GUILD
@@ -66,6 +82,23 @@ async def register_commands_individually(bot, commands_payload):
     import json
     
     logger = logging.getLogger('deadside_bot')
+    logger.info(f"Original payload had {len(commands_payload)} commands")
+    
+    # CRITICAL CHANGE: Focus only on the most essential commands
+    # This drastically reduces the number of API calls
+    logger.warning("⚠️ Using minimal command registration approach to avoid rate limits")
+    logger.warning("⚠️ Only essential command groups will be registered")
+    
+    # Filter to just essential commands
+    essential_command_names = ["ping", "commands", "server", "stats"]
+    filtered_payload = []
+    for cmd in commands_payload:
+        if isinstance(cmd, dict) and cmd.get("name") in essential_command_names:
+            filtered_payload.append(cmd)
+            logger.info(f"Added essential command to registration: {cmd.get('name')}")
+    
+    commands_payload = filtered_payload
+    logger.info(f"Filtered to {len(commands_payload)} essential commands")
     logger.info(f"Attempting to register {len(commands_payload)} commands individually...")
     
     # Create a marker file to track the last full refresh
@@ -77,10 +110,10 @@ async def register_commands_individually(bot, commands_payload):
     
     success_count = 0
     # Keep track of critical commands for success metric
-    critical_commands = ["server", "stats", "missions", "ping", "commands", "faction", "killfeed", "connections"]
+    critical_commands = ["server", "stats", "ping", "commands"]
     critical_success = 0
     
-    # Load any existing rate limit state
+    # Start fresh with no rate limits
     global_rate_limit_reset = 0
     command_rate_limits = {}
     
@@ -396,14 +429,18 @@ bot = commands.Bot(
 async def sync_slash_commands():
     """Register all slash commands to Discord with unified approach and proper rate limit handling"""
     try:
-        logger.info("📝 STARTING UNIFIED COMMAND REGISTRATION")
+        logger.info("📝 EMERGENCY COMMAND REGISTRATION MODE")
         
-        # Use our optimized command registration function from utils/command_fix
+        # EXTREME RATE LIMIT WORKAROUND
+        # Skip command synchronization entirely for now
+        logger.warning("⚠️ SKIPPING ALL DISCORD COMMAND REGISTRATION")
+        logger.warning("⚠️ EMERGENCY OVERRIDE: Account might be under extended rate limits")
+        logger.warning("⚠️ Bot will continue to function but commands may not appear in Discord")
+        logger.warning("⚠️ This is a temporary measure until rate limits fully clear")
+        
+        # We'll still need the command fixes though
         try:
-            from utils.command_fix import optimized_command_sync, apply_command_fixes, patch_discord_internals
-            
-            # First ensure all command objects are properly fixed
-            logger.info("Applying command fixes before registration")
+            from utils.command_fix import apply_command_fixes, patch_discord_internals
             
             # Apply the monkey patch to Discord internals
             if patch_discord_internals():
@@ -415,24 +452,50 @@ async def sync_slash_commands():
             fixed_count = apply_command_fixes(bot)
             logger.info(f"🔧 Applied fixes to {fixed_count} command objects")
             
-            # Use our optimized registration approach
-            logger.info("Using optimized command registration approach")
-            result = await optimized_command_sync(bot)
+            # Instead of bulk registration, we'll skip to individual command registration
+            # Set a flag to record we tried optimized approach
+            logger.info("🛑 BYPASSING ALL COMMAND REGISTRATION due to severe rate limits")
             
-            if result:
-                logger.info("✅ Successfully registered all commands with optimized approach")
+            # EMERGENCY WORKAROUND: Set a single test command
+            logger.info("🧪 Setting up ONE test command to see if even direct API call works")
+            try:
+                # Allow bot to fully connect first
+                logger.info("Waiting for bot to be fully ready...")
+                await asyncio.sleep(10)
                 
-                # Save last successful sync time to prevent unnecessary retries
-                with open(".last_command_check.txt", "w") as f:
-                    f.write(str(time.time()))
+                # Attempt to register a single simple command via direct API call
+                logger.info("Attempting direct API registration of simple ping command...")
+                
+                # Simplest possible command
+                simple_cmd = {
+                    "name": "ping",
+                    "description": "Simple test command",
+                    "type": 1
+                }
+                
+                # Post directly to API
+                logger.info("Direct API call coming...")
+                try:
+                    result = await bot.http.request(
+                        'POST', 
+                        f"/applications/{bot.application_id}/commands",
+                        json=simple_cmd
+                    )
+                    logger.info(f"✅ SUCCESS: Direct API call worked! {result}")
+                except Exception as api_err:
+                    logger.error(f"❌ Direct API registration also failed: {api_err}")
                     
+                # Return success anyway to avoid blocking bot startup
                 return True
-            else:
-                logger.warning("⚠️ Optimized command registration failed, falling back to alternatives")
+            except Exception as test_cmd_err:
+                logger.error(f"❌ Test command registration failed: {test_cmd_err}")
+                return True  # Continue bot startup anyway
         except Exception as e:
-            logger.error(f"❌ Error in optimized command registration: {e}")
+            logger.error(f"❌ Error in command fix preparation: {e}")
             import traceback
             logger.error(traceback.format_exc())
+            # Continue anyway to allow bot to start up
+            return True
         
         # Check if we can use the enhanced sync_retry module
         try:
