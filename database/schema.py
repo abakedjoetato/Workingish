@@ -1,706 +1,508 @@
 """
-MongoDB Schema Validation
+Database Schema Validation Module
 
-This module provides schema validation for MongoDB collections to ensure data integrity.
-It includes validation schemas for all collections and functions to apply the schemas.
+This module provides schema validation functions for MongoDB documents.
+It ensures data consistency and validation before saving to the database.
 """
 
+import re
 import logging
-from datetime import datetime
+import datetime
+from typing import Any, Dict, List, Optional, Union, Callable, TypeVar, cast
 
+# Set up logging
 logger = logging.getLogger('deadside_bot.database.schema')
 
-# Define schemas for collections
-SCHEMAS = {
-    "servers": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["name", "guild_id", "ip", "port", "added_at"],
-                "properties": {
-                    "name": {
-                        "bsonType": "string",
-                        "description": "Server name"
-                    },
-                    "guild_id": {
-                        "bsonType": "string",
-                        "description": "ID of the Discord guild that owns this server"
-                    },
-                    "description": {
-                        "bsonType": ["string", "null"],
-                        "description": "Optional server description"
-                    },
-                    "ip": {
-                        "bsonType": "string",
-                        "description": "Server IP address"
-                    },
-                    "port": {
-                        "bsonType": "int",
-                        "description": "Server port number"
-                    },
-                    "added_at": {
-                        "bsonType": "date",
-                        "description": "When the server was added"
-                    },
-                    "updated_at": {
-                        "bsonType": "date",
-                        "description": "When the server was last updated"
-                    },
-                    "csv_path": {
-                        "bsonType": ["string", "null"],
-                        "description": "Path to CSV files on the server"
-                    },
-                    "log_path": {
-                        "bsonType": ["string", "null"],
-                        "description": "Path to log files on the server"
-                    },
-                    "csv_enabled": {
-                        "bsonType": "bool",
-                        "description": "Whether CSV parsing is enabled"
-                    },
-                    "log_enabled": {
-                        "bsonType": "bool",
-                        "description": "Whether log parsing is enabled"
-                    },
-                    "query_enabled": {
-                        "bsonType": "bool",
-                        "description": "Whether game querying is enabled"
-                    },
-                    "auth_type": {
-                        "bsonType": "string",
-                        "enum": ["none", "password", "key"],
-                        "description": "Authentication type for file access"
-                    }
-                }
-            }
-        }
-    },
-    "players": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["player_id", "player_name", "server_id", "first_seen"],
-                "properties": {
-                    "player_id": {
-                        "bsonType": "string",
-                        "description": "Unique player ID"
-                    },
-                    "player_name": {
-                        "bsonType": "string",
-                        "description": "Player's in-game name"
-                    },
-                    "server_id": {
-                        "bsonType": "string",
-                        "description": "ID of the server the player was seen on"
-                    },
-                    "discord_id": {
-                        "bsonType": ["string", "null"],
-                        "description": "Discord user ID if linked"
-                    },
-                    "first_seen": {
-                        "bsonType": "date",
-                        "description": "When the player was first seen"
-                    },
-                    "last_seen": {
-                        "bsonType": "date",
-                        "description": "When the player was last seen"
-                    },
-                    "total_kills": {
-                        "bsonType": "int",
-                        "description": "Total number of kills"
-                    },
-                    "total_deaths": {
-                        "bsonType": "int",
-                        "description": "Total number of deaths"
-                    },
-                    "total_suicides": {
-                        "bsonType": "int",
-                        "description": "Total number of suicides"
-                    },
-                    "total_damage_dealt": {
-                        "bsonType": "double",
-                        "description": "Total damage dealt"
-                    },
-                    "total_damage_taken": {
-                        "bsonType": "double",
-                        "description": "Total damage taken"
-                    },
-                    "longest_kill_distance": {
-                        "bsonType": "double",
-                        "description": "Longest kill distance"
-                    }
-                }
-            }
-        }
-    },
-    "kills": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["killer_id", "victim_id", "server_id", "timestamp"],
-                "properties": {
-                    "killer_id": {
-                        "bsonType": "string",
-                        "description": "ID of the killer player"
-                    },
-                    "victim_id": {
-                        "bsonType": "string",
-                        "description": "ID of the victim player"
-                    },
-                    "server_id": {
-                        "bsonType": "string",
-                        "description": "ID of the server where the kill occurred"
-                    },
-                    "timestamp": {
-                        "bsonType": "date",
-                        "description": "When the kill occurred"
-                    },
-                    "weapon": {
-                        "bsonType": ["string", "null"],
-                        "description": "Weapon used for the kill"
-                    },
-                    "distance": {
-                        "bsonType": ["double", "null"],
-                        "description": "Distance of the kill in meters"
-                    },
-                    "damage": {
-                        "bsonType": ["double", "null"],
-                        "description": "Damage dealt in the kill"
-                    },
-                    "is_headshot": {
-                        "bsonType": ["bool", "null"],
-                        "description": "Whether the kill was a headshot"
-                    },
-                    "is_suicide": {
-                        "bsonType": "bool",
-                        "description": "Whether the kill was a suicide"
-                    },
-                    "source_file": {
-                        "bsonType": ["string", "null"],
-                        "description": "Source file where the kill was found"
-                    }
-                }
-            }
-        }
-    },
-    "guild_configs": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["guild_id"],
-                "properties": {
-                    "guild_id": {
-                        "bsonType": "string",
-                        "description": "Discord guild ID"
-                    },
-                    "premium_tier": {
-                        "bsonType": "string",
-                        "enum": ["free", "survivor", "warlord", "overseer"],
-                        "description": "Premium tier for the guild"
-                    },
-                    "tier_updated_at": {
-                        "bsonType": "date",
-                        "description": "When the premium tier was last updated"
-                    },
-                    "killfeed_channel": {
-                        "bsonType": ["string", "null"],
-                        "description": "Channel ID for killfeed notifications"
-                    },
-                    "killfeed_enabled": {
-                        "bsonType": "bool",
-                        "description": "Whether killfeed notifications are enabled"
-                    },
-                    "mission_channel": {
-                        "bsonType": ["string", "null"],
-                        "description": "Channel ID for mission notifications"
-                    },
-                    "mission_enabled": {
-                        "bsonType": "bool",
-                        "description": "Whether mission notifications are enabled"
-                    },
-                    "connection_channel": {
-                        "bsonType": ["string", "null"],
-                        "description": "Channel ID for connection notifications"
-                    },
-                    "connection_enabled": {
-                        "bsonType": "bool",
-                        "description": "Whether connection notifications are enabled"
-                    }
-                }
-            }
-        }
-    },
-    "factions": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["name", "abbreviation", "guild_id", "leader_id", "created_at"],
-                "properties": {
-                    "name": {
-                        "bsonType": "string",
-                        "description": "Faction name"
-                    },
-                    "abbreviation": {
-                        "bsonType": "string",
-                        "description": "Faction abbreviation (3 chars or less)"
-                    },
-                    "guild_id": {
-                        "bsonType": "string",
-                        "description": "Discord guild ID"
-                    },
-                    "leader_id": {
-                        "bsonType": "string",
-                        "description": "Discord user ID of the faction leader"
-                    },
-                    "members": {
-                        "bsonType": "array",
-                        "description": "Array of Discord user IDs of faction members",
-                        "items": {
-                            "bsonType": "string"
-                        }
-                    },
-                    "role_id": {
-                        "bsonType": ["string", "null"],
-                        "description": "Discord role ID for the faction"
-                    },
-                    "created_at": {
-                        "bsonType": "date",
-                        "description": "When the faction was created"
-                    },
-                    "updated_at": {
-                        "bsonType": "date",
-                        "description": "When the faction was last updated"
-                    }
-                }
-            }
-        }
-    },
-    "parser_memory": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["server_id", "last_run"],
-                "properties": {
-                    "server_id": {
-                        "bsonType": "string", 
-                        "description": "ID of server this parser memory belongs to"
-                    },
-                    "last_run": {
-                        "bsonType": "date",
-                        "description": "When the parser was last run"
-                    },
-                    "last_file": {
-                        "bsonType": ["string", "null"],
-                        "description": "Last file that was processed"
-                    },
-                    "last_line": {
-                        "bsonType": ["int", "null"],
-                        "description": "Last line processed in the last file"
-                    },
-                    "progress": {
-                        "bsonType": ["double", "null"],
-                        "description": "Progress percentage for batch operations (0-100)"
-                    },
-                    "status": {
-                        "bsonType": ["string", "null"],
-                        "description": "Current status message"
-                    },
-                    "last_update_timestamp": {
-                        "bsonType": ["date", "null"],
-                        "description": "When the progress was last updated"
-                    },
-                    "processed_files": {
-                        "bsonType": ["array", "null"],
-                        "description": "List of files that have been processed",
-                        "items": {
-                            "bsonType": "string"
-                        }
-                    },
-                    "batch_mode": {
-                        "bsonType": "bool",
-                        "description": "Whether batch mode is enabled"
-                    }
-                }
-            }
-        }
-    },
-    "rivalries": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["player_id", "server_id", "updated_at"],
-                "properties": {
-                    "player_id": {
-                        "bsonType": "string",
-                        "description": "ID of the player"
-                    },
-                    "server_id": {
-                        "bsonType": "string", 
-                        "description": "ID of the server"
-                    },
-                    "updated_at": {
-                        "bsonType": "date",
-                        "description": "When the rivalry was last updated"
-                    },
-                    "prey": {
-                        "bsonType": ["object", "null"],
-                        "description": "Player's prey (most killed)",
-                        "properties": {
-                            "id": {
-                                "bsonType": "string",
-                                "description": "Player ID of the prey"
-                            },
-                            "name": {
-                                "bsonType": "string",
-                                "description": "Name of the prey"
-                            },
-                            "kills": {
-                                "bsonType": "int",
-                                "description": "Number of times killed"
-                            },
-                            "last_kill": {
-                                "bsonType": "date",
-                                "description": "When the prey was last killed"
-                            }
-                        }
-                    },
-                    "nemesis": {
-                        "bsonType": ["object", "null"],
-                        "description": "Player's nemesis (killed by the most)",
-                        "properties": {
-                            "id": {
-                                "bsonType": "string",
-                                "description": "Player ID of the nemesis"
-                            },
-                            "name": {
-                                "bsonType": "string",
-                                "description": "Name of the nemesis"
-                            },
-                            "deaths": {
-                                "bsonType": "int",
-                                "description": "Number of times killed by nemesis"
-                            },
-                            "last_death": {
-                                "bsonType": "date",
-                                "description": "When last killed by the nemesis"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    },
-    "connections": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["player_id", "server_id", "type", "timestamp"],
-                "properties": {
-                    "player_id": {
-                        "bsonType": "string",
-                        "description": "ID of the player"
-                    },
-                    "player_name": {
-                        "bsonType": "string",
-                        "description": "Name of the player at time of connection"
-                    },
-                    "server_id": {
-                        "bsonType": "string", 
-                        "description": "ID of the server"
-                    },
-                    "type": {
-                        "bsonType": "string",
-                        "enum": ["connect", "disconnect"],
-                        "description": "Type of connection event"
-                    },
-                    "timestamp": {
-                        "bsonType": "date",
-                        "description": "When the connection/disconnection occurred"
-                    },
-                    "session_id": {
-                        "bsonType": ["string", "null"],
-                        "description": "Unique session ID if known"
-                    },
-                    "ip_address": {
-                        "bsonType": ["string", "null"],
-                        "description": "Player's IP address if available and privacy settings allow"
-                    },
-                    "duration": {
-                        "bsonType": ["int", "null"],
-                        "description": "Session duration in seconds (for disconnect events)"
-                    },
-                    "reason": {
-                        "bsonType": ["string", "null"],
-                        "description": "Reason for disconnection if known"
-                    },
-                    "discord_id": {
-                        "bsonType": ["string", "null"],
-                        "description": "Discord user ID if player is linked"
-                    }
-                }
-            }
-        }
-    },
-    "player_links": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["discord_id", "created_at"],
-                "properties": {
-                    "discord_id": {
-                        "bsonType": "string",
-                        "description": "Discord user ID"
-                    },
-                    "primary_player_id": {
-                        "bsonType": ["string", "null"],
-                        "description": "Primary player ID (main character)"
-                    },
-                    "linked_players": {
-                        "bsonType": "array",
-                        "description": "Array of linked player IDs",
-                        "items": {
-                            "bsonType": "string"
-                        }
-                    },
-                    "verified": {
-                        "bsonType": "bool",
-                        "description": "Whether the link has been verified"
-                    },
-                    "created_at": {
-                        "bsonType": "date",
-                        "description": "When the link was created"
-                    },
-                    "updated_at": {
-                        "bsonType": "date",
-                        "description": "When the link was last updated"
-                    },
-                    "verification_code": {
-                        "bsonType": ["string", "null"],
-                        "description": "Verification code for linking"
-                    },
-                    "verification_expires": {
-                        "bsonType": ["date", "null"],
-                        "description": "When the verification code expires"
-                    }
-                }
-            }
-        }
-    },
-    "missions": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["server_id", "mission_type", "start_time"],
-                "properties": {
-                    "server_id": {
-                        "bsonType": "string",
-                        "description": "ID of the server"
-                    },
-                    "mission_type": {
-                        "bsonType": "string",
-                        "description": "Type of mission (e.g., 'airdrop', 'convoy')"
-                    },
-                    "mission_id": {
-                        "bsonType": ["string", "null"],
-                        "description": "Unique mission ID if available"
-                    },
-                    "start_time": {
-                        "bsonType": "date",
-                        "description": "When the mission started"
-                    },
-                    "end_time": {
-                        "bsonType": ["date", "null"],
-                        "description": "When the mission ended (null if ongoing)"
-                    },
-                    "location": {
-                        "bsonType": ["string", "null"],
-                        "description": "Location name if available"
-                    },
-                    "coordinates": {
-                        "bsonType": ["object", "null"],
-                        "description": "Map coordinates",
-                        "properties": {
-                            "x": {"bsonType": "double"},
-                            "y": {"bsonType": "double"},
-                            "z": {"bsonType": ["double", "null"]}
-                        }
-                    },
-                    "status": {
-                        "bsonType": "string",
-                        "enum": ["announced", "active", "completed", "failed", "expired"],
-                        "description": "Current mission status"
-                    },
-                    "rewards": {
-                        "bsonType": ["array", "null"],
-                        "description": "List of potential rewards",
-                        "items": {
-                            "bsonType": "string"
-                        }
-                    },
-                    "participants": {
-                        "bsonType": ["array", "null"],
-                        "description": "List of participating player IDs",
-                        "items": {
-                            "bsonType": "string"
-                        }
-                    },
-                    "winner_id": {
-                        "bsonType": ["string", "null"],
-                        "description": "ID of the player who completed/won the mission"
-                    }
-                }
-            }
-        }
-    },
-    "server_status": {
-        "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["server_id", "timestamp", "status"],
-                "properties": {
-                    "server_id": {
-                        "bsonType": "string",
-                        "description": "ID of the server"
-                    },
-                    "timestamp": {
-                        "bsonType": "date",
-                        "description": "When the status was recorded"
-                    },
-                    "status": {
-                        "bsonType": "string",
-                        "enum": ["online", "offline", "restarting", "maintenance"],
-                        "description": "Server status"
-                    },
-                    "player_count": {
-                        "bsonType": ["int", "null"],
-                        "description": "Number of players online"
-                    },
-                    "max_players": {
-                        "bsonType": ["int", "null"],
-                        "description": "Maximum player capacity"
-                    },
-                    "uptime": {
-                        "bsonType": ["int", "null"],
-                        "description": "Server uptime in seconds"
-                    },
-                    "performance": {
-                        "bsonType": ["object", "null"],
-                        "description": "Performance metrics",
-                        "properties": {
-                            "cpu_usage": {"bsonType": ["double", "null"]},
-                            "memory_usage": {"bsonType": ["double", "null"]},
-                            "tick_rate": {"bsonType": ["double", "null"]}
-                        }
-                    },
-                    "response_time": {
-                        "bsonType": ["double", "null"],
-                        "description": "Server response time in milliseconds"
-                    },
-                    "version": {
-                        "bsonType": ["string", "null"],
-                        "description": "Server version"
-                    }
-                }
-            }
-        }
-    }
-}
+# Type for validators and schema definitions
+T = TypeVar('T')
+SchemaDefinition = Dict[str, Dict[str, Any]]
+ValidatorFunc = Callable[[Any], bool]
 
-async def apply_schema_validations(db):
+class SchemaValidationError(Exception):
+    """Exception raised when a document fails schema validation"""
+    def __init__(self, message: str, field: Optional[str] = None, value: Any = None):
+        self.field = field
+        self.value = value
+        super().__init__(message)
+
+def validate_type(value: Any, expected_type: Any) -> bool:
     """
-    Apply schema validations to all collections
+    Validate that a value is of the expected type
     
     Args:
-        db: Database instance
+        value: The value to check
+        expected_type: The expected type or list of types
         
     Returns:
-        bool: True if successful, False otherwise
+        bool: True if value is of the expected type, False otherwise
     """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    # Handle union types (list of allowed types)
+    if isinstance(expected_type, list):
+        return any(isinstance(value, t) for t in expected_type)
+        
+    return isinstance(value, expected_type)
+
+def validate_required(value: Any) -> bool:
+    """
+    Validate that a required value is not None or empty
+    
+    Args:
+        value: The value to check
+        
+    Returns:
+        bool: True if value is not None or empty, False otherwise
+    """
+    if value is None:
+        return False
+        
+    # For strings, check if empty
+    if isinstance(value, str) and not value.strip():
+        return False
+        
+    # For lists and dicts, check if empty
+    if (isinstance(value, (list, dict)) and not value):
+        return False
+        
+    return True
+
+def validate_min_length(value: Any, min_length: int) -> bool:
+    """
+    Validate that a value has a minimum length
+    
+    Args:
+        value: The value to check
+        min_length: The minimum length required
+        
+    Returns:
+        bool: True if value meets the minimum length requirement, False otherwise
+    """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    if hasattr(value, '__len__'):
+        return len(value) >= min_length
+        
+    return True  # Non-iterable values always pass
+
+def validate_max_length(value: Any, max_length: int) -> bool:
+    """
+    Validate that a value has a maximum length
+    
+    Args:
+        value: The value to check
+        max_length: The maximum length allowed
+        
+    Returns:
+        bool: True if value meets the maximum length requirement, False otherwise
+    """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    if hasattr(value, '__len__'):
+        return len(value) <= max_length
+        
+    return True  # Non-iterable values always pass
+
+def validate_min_value(value: Any, min_value: Union[int, float, datetime.datetime]) -> bool:
+    """
+    Validate that a value is at least a minimum value
+    
+    Args:
+        value: The value to check
+        min_value: The minimum value required
+        
+    Returns:
+        bool: True if value meets the minimum value requirement, False otherwise
+    """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    if isinstance(value, (int, float, datetime.datetime)) and isinstance(min_value, type(value)):
+        return value >= min_value
+        
+    return True  # Non-comparable values always pass
+
+def validate_max_value(value: Any, max_value: Union[int, float, datetime.datetime]) -> bool:
+    """
+    Validate that a value is at most a maximum value
+    
+    Args:
+        value: The value to check
+        max_value: The maximum value allowed
+        
+    Returns:
+        bool: True if value meets the maximum value requirement, False otherwise
+    """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    if isinstance(value, (int, float, datetime.datetime)) and isinstance(max_value, type(value)):
+        return value <= max_value
+        
+    return True  # Non-comparable values always pass
+
+def validate_regex(value: Any, pattern: str) -> bool:
+    """
+    Validate that a value matches a regex pattern
+    
+    Args:
+        value: The value to check
+        pattern: The regex pattern to match
+        
+    Returns:
+        bool: True if value matches the pattern, False otherwise
+    """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    if isinstance(value, str):
+        return bool(re.match(pattern, value))
+        
+    return False  # Non-string values fail regex validation
+
+def validate_enum(value: Any, allowed_values: List[Any]) -> bool:
+    """
+    Validate that a value is one of a set of allowed values
+    
+    Args:
+        value: The value to check
+        allowed_values: List of allowed values
+        
+    Returns:
+        bool: True if value is in the allowed values, False otherwise
+    """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    return value in allowed_values
+
+def validate_subdocument(value: Any, schema: SchemaDefinition) -> bool:
+    """
+    Validate a nested document against a schema
+    
+    Args:
+        value: The document to validate
+        schema: The schema definition
+        
+    Returns:
+        bool: True if document is valid, False otherwise
+    """
+    if value is None:
+        return True  # None is allowed unless required=True is specified
+        
+    if not isinstance(value, dict):
+        return False
+        
+    # Validate each field in the schema
     try:
-        logger.info("Applying schema validations to collections")
-        
-        results = {}
-        
-        for collection_name, schema in SCHEMAS.items():
-            try:
-                # Check if collection exists, create it if it doesn't
-                collection_names = await db._db.list_collection_names()
-                if collection_name not in collection_names:
-                    logger.info(f"Creating collection {collection_name}")
-                    await db._db.create_collection(collection_name)
-                
-                # Apply validation schema
-                logger.info(f"Applying schema validation to {collection_name}")
-                await db._db.command({
-                    "collMod": collection_name,
-                    "validator": schema["validator"],
-                    "validationLevel": "moderate"  # Only validate on inserts and updates
-                })
-                
-                results[collection_name] = True
-                logger.info(f"Successfully applied schema validation to {collection_name}")
-            except Exception as e:
-                results[collection_name] = False
-                logger.error(f"Failed to apply schema validation to {collection_name}: {e}")
-        
-        # Log summary
-        success_count = sum(1 for result in results.values() if result)
-        logger.info(f"Applied schema validations to {success_count}/{len(SCHEMAS)} collections")
-        
-        return all(results.values())
-    except Exception as e:
-        logger.error(f"Error applying schema validations: {e}")
+        validate_document(value, schema)
+        return True
+    except SchemaValidationError:
         return False
 
-async def validate_collection_data(db, collection_name):
+def validate_array(value: Any, item_schema: Dict[str, Any]) -> bool:
     """
-    Validate existing data in a collection against its schema
+    Validate that each item in an array matches a schema
     
     Args:
-        db: Database instance
-        collection_name: Name of the collection to validate
+        value: The array to validate
+        item_schema: The schema for each item
         
     Returns:
-        tuple: (valid_count, invalid_count, invalid_docs)
+        bool: True if all items are valid, False otherwise
     """
-    try:
-        logger.info(f"Validating data in collection {collection_name}")
+    if value is None:
+        return True  # None is allowed unless required=True is specified
         
-        if collection_name not in SCHEMAS:
-            logger.error(f"No schema defined for collection {collection_name}")
-            return 0, 0, []
+    if not isinstance(value, list):
+        return False
         
-        collection = await db.get_collection(collection_name)
-        cursor = collection.find({})
+    # Empty arrays are valid
+    if not value:
+        return True
         
-        valid_count = 0
-        invalid_count = 0
-        invalid_docs = []
+    # Validate each item
+    for item in value:
+        # If item_schema has a type key, it's a simple schema
+        if 'type' in item_schema:
+            if not validate_field(item, item_schema):
+                return False
+        # Otherwise, it's a document schema
+        else:
+            if not validate_subdocument(item, item_schema):
+                return False
+                
+    return True
+
+def validate_field(value: Any, field_schema: Dict[str, Any]) -> bool:
+    """
+    Validate a field value against its schema
+    
+    Args:
+        value: The value to validate
+        field_schema: The schema for the field
         
-        schema = SCHEMAS[collection_name]["validator"]["$jsonSchema"]
-        required_fields = schema.get("required", [])
-        properties = schema.get("properties", {})
+    Returns:
+        bool: True if field is valid, False otherwise
+    """
+    # Check if required
+    if field_schema.get('required', False) and not validate_required(value):
+        return False
         
-        async for doc in cursor:
-            is_valid = True
+    # If value is None and not required, it's valid
+    if value is None:
+        return True
+        
+    # Check type
+    if 'type' in field_schema and not validate_type(value, field_schema['type']):
+        return False
+        
+    # Check length constraints
+    if 'min_length' in field_schema and not validate_min_length(value, field_schema['min_length']):
+        return False
+        
+    if 'max_length' in field_schema and not validate_max_length(value, field_schema['max_length']):
+        return False
+        
+    # Check value constraints
+    if 'min_value' in field_schema and not validate_min_value(value, field_schema['min_value']):
+        return False
+        
+    if 'max_value' in field_schema and not validate_max_value(value, field_schema['max_value']):
+        return False
+        
+    # Check regex
+    if 'pattern' in field_schema and not validate_regex(value, field_schema['pattern']):
+        return False
+        
+    # Check enum
+    if 'enum' in field_schema and not validate_enum(value, field_schema['enum']):
+        return False
+        
+    # Check subdocument
+    if 'schema' in field_schema and not validate_subdocument(value, field_schema['schema']):
+        return False
+        
+    # Check array
+    if 'items' in field_schema and not validate_array(value, field_schema['items']):
+        return False
+        
+    # Custom validator
+    if 'validator' in field_schema:
+        validator_func = cast(ValidatorFunc, field_schema['validator'])
+        if not validator_func(value):
+            return False
             
-            # Check required fields
-            for field in required_fields:
-                if field not in doc:
-                    is_valid = False
-                    invalid_docs.append({
-                        "_id": str(doc.get("_id")),
-                        "reason": f"Missing required field: {field}"
-                    })
-                    break
-            
-            if is_valid:
-                valid_count += 1
-            else:
-                invalid_count += 1
+    return True
+
+def validate_document(document: Dict[str, Any], schema: SchemaDefinition) -> None:
+    """
+    Validate a document against a schema
+    
+    Args:
+        document: Document to validate
+        schema: Schema definition
         
-        logger.info(f"Validation results for {collection_name}: {valid_count} valid, {invalid_count} invalid")
-        return valid_count, invalid_count, invalid_docs
-    except Exception as e:
-        logger.error(f"Error validating collection {collection_name}: {e}")
-        return 0, 0, [{"_id": "error", "reason": str(e)}]
+    Raises:
+        SchemaValidationError: If document does not match schema
+    """
+    if not document:
+        raise SchemaValidationError("Document is empty")
+        
+    if not schema:
+        raise SchemaValidationError("Schema is empty")
+        
+    # Validate each field in the schema
+    for field_name, field_schema in schema.items():
+        # Get the field value (or None if field is missing)
+        value = document.get(field_name)
+        
+        # Validate the field
+        if not validate_field(value, field_schema):
+            error_message = f"Invalid value for field '{field_name}'"
+            
+            # Include specific validation error if available
+            if 'type' in field_schema and not validate_type(value, field_schema['type']):
+                expected_type = field_schema['type']
+                type_name = expected_type.__name__ if not isinstance(expected_type, list) else [t.__name__ for t in expected_type]
+                error_message = f"Field '{field_name}' should be of type {type_name}, got {type(value).__name__}"
+                
+            elif field_schema.get('required', False) and not validate_required(value):
+                error_message = f"Field '{field_name}' is required but missing or empty"
+                
+            elif 'min_length' in field_schema and not validate_min_length(value, field_schema['min_length']):
+                error_message = f"Field '{field_name}' should have a minimum length of {field_schema['min_length']}"
+                
+            elif 'max_length' in field_schema and not validate_max_length(value, field_schema['max_length']):
+                error_message = f"Field '{field_name}' should have a maximum length of {field_schema['max_length']}"
+                
+            elif 'min_value' in field_schema and not validate_min_value(value, field_schema['min_value']):
+                error_message = f"Field '{field_name}' should be at least {field_schema['min_value']}"
+                
+            elif 'max_value' in field_schema and not validate_max_value(value, field_schema['max_value']):
+                error_message = f"Field '{field_name}' should be at most {field_schema['max_value']}"
+                
+            elif 'pattern' in field_schema and not validate_regex(value, field_schema['pattern']):
+                error_message = f"Field '{field_name}' should match pattern {field_schema['pattern']}"
+                
+            elif 'enum' in field_schema and not validate_enum(value, field_schema['enum']):
+                error_message = f"Field '{field_name}' should be one of {field_schema['enum']}"
+                
+            raise SchemaValidationError(error_message, field_name, value)
+
+# Schema definitions for commonly used documents
+
+# Guild schema
+GUILD_SCHEMA = {
+    'guild_id': {'required': True, 'type': str, 'min_length': 1},
+    'name': {'required': False, 'type': str, 'max_length': 100},
+    'premium_tier': {'required': False, 'type': str, 'enum': ['survivor', 'warlord', 'overseer', 'free', 'premium', 'enterprise']},
+    'created_at': {'required': False, 'type': datetime.datetime},
+    'updated_at': {'required': False, 'type': datetime.datetime},
+    'settings': {'required': False, 'type': dict}
+}
+
+# Server schema
+SERVER_SCHEMA = {
+    'server_id': {'required': True, 'type': str, 'min_length': 1},
+    'guild_id': {'required': True, 'type': str, 'min_length': 1},
+    'name': {'required': True, 'type': str, 'min_length': 1, 'max_length': 100},
+    'address': {'required': True, 'type': str, 'min_length': 1, 'max_length': 100},
+    'port': {'required': True, 'type': int, 'min_value': 1, 'max_value': 65535},
+    'query_port': {'required': False, 'type': int, 'min_value': 1, 'max_value': 65535},
+    'rcon_port': {'required': False, 'type': int, 'min_value': 1, 'max_value': 65535},
+    'rcon_password': {'required': False, 'type': str},
+    'ftp_username': {'required': False, 'type': str},
+    'ftp_password': {'required': False, 'type': str},
+    'ftp_port': {'required': False, 'type': int, 'min_value': 1, 'max_value': 65535},
+    'sftp': {'required': False, 'type': bool},
+    'csv_path': {'required': False, 'type': str},
+    'log_path': {'required': False, 'type': str},
+    'is_default': {'required': False, 'type': bool},
+    'csv_enabled': {'required': False, 'type': bool},
+    'log_enabled': {'required': False, 'type': bool},
+    'last_poll': {'required': False, 'type': datetime.datetime},
+    'status': {'required': False, 'type': str, 'enum': ['online', 'offline', 'unknown']},
+    'players_online': {'required': False, 'type': int, 'min_value': 0},
+    'max_players': {'required': False, 'type': int, 'min_value': 0},
+    'created_at': {'required': False, 'type': datetime.datetime},
+    'updated_at': {'required': False, 'type': datetime.datetime}
+}
+
+# Player schema
+PLAYER_SCHEMA = {
+    'player_id': {'required': True, 'type': str, 'min_length': 1},
+    'server_id': {'required': True, 'type': str, 'min_length': 1},
+    'steam_id': {'required': True, 'type': str, 'min_length': 1, 'pattern': r'^[0-9]+$'},
+    'name': {'required': True, 'type': str, 'min_length': 1, 'max_length': 100},
+    'last_seen': {'required': False, 'type': datetime.datetime},
+    'first_seen': {'required': False, 'type': datetime.datetime},
+    'play_time': {'required': False, 'type': int, 'min_value': 0},
+    'kills': {'required': False, 'type': int, 'min_value': 0},
+    'deaths': {'required': False, 'type': int, 'min_value': 0},
+    'suicides': {'required': False, 'type': int, 'min_value': 0},
+    'longest_kill': {'required': False, 'type': int, 'min_value': 0},
+    'favorite_weapon': {'required': False, 'type': str},
+    'nemesis': {'required': False, 'type': str},
+    'prey': {'required': False, 'type': str},
+    'is_online': {'required': False, 'type': bool},
+    'faction_id': {'required': False, 'type': str},
+    'linked_ids': {'required': False, 'type': list},
+    'stats': {'required': False, 'type': dict}
+}
+
+# Faction schema
+FACTION_SCHEMA = {
+    'faction_id': {'required': True, 'type': str, 'min_length': 1},
+    'guild_id': {'required': True, 'type': str, 'min_length': 1},
+    'server_id': {'required': True, 'type': str, 'min_length': 1},
+    'name': {'required': True, 'type': str, 'min_length': 1, 'max_length': 50},
+    'tag': {'required': False, 'type': str, 'max_length': 10},
+    'color': {'required': False, 'type': str, 'pattern': r'^#[0-9a-fA-F]{6}$'},
+    'icon_url': {'required': False, 'type': str},
+    'leader_id': {'required': True, 'type': str, 'min_length': 1},
+    'members': {'required': True, 'type': list},
+    'created_at': {'required': False, 'type': datetime.datetime},
+    'updated_at': {'required': False, 'type': datetime.datetime},
+    'description': {'required': False, 'type': str, 'max_length': 1000},
+    'discord_role_id': {'required': False, 'type': str}
+}
+
+# Killfeed entry schema
+KILLFEED_SCHEMA = {
+    'kill_id': {'required': True, 'type': str, 'min_length': 1},
+    'server_id': {'required': True, 'type': str, 'min_length': 1},
+    'killer_id': {'required': False, 'type': str},
+    'killer_name': {'required': False, 'type': str},
+    'victim_id': {'required': True, 'type': str, 'min_length': 1},
+    'victim_name': {'required': True, 'type': str, 'min_length': 1},
+    'weapon': {'required': False, 'type': str},
+    'distance': {'required': False, 'type': int, 'min_value': 0},
+    'timestamp': {'required': True, 'type': datetime.datetime},
+    'is_suicide': {'required': False, 'type': bool},
+    'is_headshot': {'required': False, 'type': bool},
+    'killer_faction': {'required': False, 'type': str},
+    'victim_faction': {'required': False, 'type': str}
+}
+
+# Mission schema
+MISSION_SCHEMA = {
+    'mission_id': {'required': True, 'type': str, 'min_length': 1},
+    'server_id': {'required': True, 'type': str, 'min_length': 1},
+    'name': {'required': True, 'type': str, 'min_length': 1},
+    'type': {'required': False, 'type': str},
+    'location': {'required': False, 'type': str},
+    'start_time': {'required': True, 'type': datetime.datetime},
+    'end_time': {'required': False, 'type': datetime.datetime},
+    'status': {'required': False, 'type': str, 'enum': ['active', 'completed', 'failed', 'unknown']},
+    'participants': {'required': False, 'type': list}
+}
+
+# Parser memory schema
+PARSER_MEMORY_SCHEMA = {
+    'memory_id': {'required': True, 'type': str, 'min_length': 1},
+    'server_id': {'required': True, 'type': str, 'min_length': 1},
+    'parser_type': {'required': True, 'type': str, 'enum': ['csv', 'log', 'batch']},
+    'last_position': {'required': False, 'type': int, 'min_value': 0},
+    'last_file': {'required': False, 'type': str},
+    'last_timestamp': {'required': False, 'type': datetime.datetime},
+    'batch_files_total': {'required': False, 'type': int, 'min_value': 0},
+    'batch_files_processed': {'required': False, 'type': int, 'min_value': 0},
+    'batch_lines_processed': {'required': False, 'type': int, 'min_value': 0},
+    'progress': {'required': False, 'type': float, 'min_value': 0, 'max_value': 100},
+    'status': {'required': False, 'type': str, 'enum': ['idle', 'running', 'completed', 'error']},
+    'error': {'required': False, 'type': str},
+    'created_at': {'required': False, 'type': datetime.datetime},
+    'updated_at': {'required': False, 'type': datetime.datetime},
+    'last_update_timestamp': {'required': False, 'type': datetime.datetime}
+}
+
+# Map of collection names to schemas
+COLLECTION_SCHEMAS = {
+    'guilds': GUILD_SCHEMA,
+    'servers': SERVER_SCHEMA,
+    'players': PLAYER_SCHEMA,
+    'factions': FACTION_SCHEMA,
+    'killfeed': KILLFEED_SCHEMA,
+    'missions': MISSION_SCHEMA,
+    'parser_memory': PARSER_MEMORY_SCHEMA
+}
+
+def validate_for_collection(document: Dict[str, Any], collection_name: str) -> None:
+    """
+    Validate a document against the schema for a specific collection
+    
+    Args:
+        document: Document to validate
+        collection_name: Name of the collection
+        
+    Raises:
+        SchemaValidationError: If document does not match schema
+    """
+    if collection_name not in COLLECTION_SCHEMAS:
+        raise ValueError(f"No schema defined for collection '{collection_name}'")
+        
+    validate_document(document, COLLECTION_SCHEMAS[collection_name])

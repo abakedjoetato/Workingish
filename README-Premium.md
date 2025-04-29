@@ -151,7 +151,9 @@ Please upgrade to access this feature.
 
 ## Technical Implementation
 
-The premium tier system is implemented using decorators that check the guild's premium status before executing commands:
+The premium tier system is implemented using advanced decorators that check the guild's premium status before executing commands, with comprehensive error handling, caching, and consistent messaging.
+
+### Premium Tier Decorator
 
 ```python
 @premium_tier_required(tier=1)  # Requires Warlord (Premium) tier
@@ -159,19 +161,64 @@ async def premium_command(self, ctx):
     # Command implementation
 ```
 
-Tier values are mapped as follows:
-- 0: Survivor (Free)
-- 1: Warlord (Premium)
-- 2: Overseer (Enterprise)
+This decorator performs several functions:
+1. Retrieves the guild's premium tier from the database (with caching)
+2. Compares the guild's tier with the required tier for the command
+3. Either allows the command to proceed or returns a helpful error message
+4. Logs the access attempt for analytics
+5. Provides consistent user feedback
 
-The decorator will automatically check the guild's tier from the database and compare it with the required tier. If the guild's tier is lower than required, the command will be rejected with an appropriate message.
+### Tier Mapping System
 
-The premium tier enforcement is implemented across all feature areas:
-- Faction system commands
-- Advanced statistical analysis
-- Rivalry tracking
-- Multiple server management
-- Historical data processing
+Tier values are consistently mapped as follows across the entire application:
+- 0: Survivor (Free) - Our base tier with core functionality
+- 1: Warlord (Premium) - Mid-tier with enhanced features
+- 2: Overseer (Enterprise) - Top tier with all features and limits removed
+
+This consistent naming and numbering convention is maintained throughout the code to ensure stability and readability.
+
+### Premium Tier Enforcement
+
+The premium tier enforcement is robustly implemented across all feature areas:
+
+- **Faction system commands** - All faction creation and management requires Warlord tier or higher
+- **Advanced statistical analysis** - Detailed statistics require premium access
+- **Rivalry tracking** - Player rivalry management requires Warlord tier
+- **Multiple server management** - Limited to a single server in Survivor tier
+- **Historical data processing** - Limited retention or disabled in free tier
+
+### Implementation Details
+
+The premium tier system is built with several key design principles:
+
+1. **Centralized logic**: All premium tier checks are handled by the same core functions
+2. **Clear messaging**: Users receive specific feedback about the tier requirements
+3. **Graceful degradation**: Features are selectively enabled or limited rather than completely failing
+4. **Consistent naming**: Tier names and numbering are consistent across all user-facing elements
+5. **Optimized performance**: Database lookups for premium status are cached to minimize performance impact
+6. **Extensive testing**: Premium tier enforcement is automatically tested with the command testing framework
+
+### Database Schema
+
+Premium tier information is stored in the guild_configs collection with the following structure:
+
+```json
+{
+  "guild_id": "discord_guild_id",
+  "premium_tier": "warlord",
+  "tier_updated_at": "2025-04-01T12:00:00Z",
+  "tier_expiry": "2026-04-01T12:00:00Z"
+}
+```
+
+### Upgrade Workflow
+
+When a guild is upgraded:
+1. The database record is updated with the new tier and timestamp
+2. All caches are immediately invalidated
+3. New capabilities become available without requiring restart
+4. The upgrade is logged for audit purposes
+5. Users are notified of the new capabilities
 
 ## Support
 

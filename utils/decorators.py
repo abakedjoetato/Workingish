@@ -2,30 +2,156 @@
 Decorators Module
 
 This module provides useful decorators for command handlers and other functions.
+Includes decorators for premium tier enforcement, rate limiting, guild-only commands,
+server requirement checks, and more.
 """
 
 import asyncio
 import functools
 import logging
-from typing import Any, Callable, Optional, TypeVar, cast
+import inspect
+from datetime import datetime
+from typing import Any, Callable, Optional, TypeVar, cast, List, Dict, Union, Tuple
 
 # Import types from our helper module
-from utils.lsp_error_suppressors import DiscordContext
+from utils.lsp_error_suppressors import DiscordContext, DiscordGuild, DiscordMember
 
 logger = logging.getLogger('deadside_bot.utils.decorators')
 
 # Type variables for generic typing
 F = TypeVar('F', bound=Callable[..., Any])
 
+# Mapping for tier names to numeric values for consistent comparison
+TIER_MAPPING = {
+    # String tier names
+    "survivor": 0,
+    "warlord": 1, 
+    "overseer": 2,
+    "free": 0,
+    "premium": 1,
+    "enterprise": 2,
+    # Legacy numeric tiers
+    0: 0,
+    1: 1,
+    2: 2
+}
+
+# Display names for tiers
+TIER_DISPLAY_NAMES = {
+    0: "Survivor (Free)",
+    1: "Warlord (Premium)",
+    2: "Overseer (Enterprise)"
+}
+
+# Maximum servers allowed per tier
+TIER_MAX_SERVERS = {
+    0: 1,  # Survivor
+    1: 3,  # Warlord
+    2: 10  # Overseer
+}
+
+async def get_guild_numeric_tier(db, guild_id: str) -> int:
+    """
+    Get the numeric tier for a guild
+    
+    Args:
+        db: Database instance
+        guild_id: Discord guild ID
+        
+    Returns:
+        Numeric tier (0 = survivor, 1 = warlord, 2 = overseer)
+    """
+    try:
+        if not db:
+            logger.error("No database instance provided to get_guild_numeric_tier")
+            return 0
+            
+        guild_tier = await db.get_guild_premium_tier(guild_id)
+        return TIER_MAPPING.get(guild_tier, 0)
+    except Exception as e:
+        logger.error(f"Error getting guild tier: {e}")
+        return 0
+
+async def check_premium_tier(ctx: DiscordContext, required_tier: int) -> Tuple[bool, str]:
+    """
+    Check if a guild has a sufficient premium tier
+    
+    Args:
+        ctx: Discord context
+        required_tier: Minimum tier required
+        
+    Returns:
+        Tuple of (has_required_tier, error_message)
+    """
+    from database.connection import Database
+    
+    try:
+        # Always allow in DMs for testing
+        if ctx.guild is None:
+            return True, ""
+            
+        # Get the guild's premium tier
+        db = await Database.get_instance()
+        if not db:
+            logger.error("Failed to get database instance in check_premium_tier")
+            return False, "⚠️ Could not verify premium status. Please try again later."
+            
+        numeric_guild_tier = await get_guild_numeric_tier(db, ctx.guild.id)
+        
+        if numeric_guild_tier < required_tier:
+            required_tier_name = TIER_DISPLAY_NAMES.get(required_tier, f"Tier {required_tier}")
+            current_tier_name = TIER_DISPLAY_NAMES.get(numeric_guild_tier, f"Tier {numeric_guild_tier}")
+            
+            error_message = (
+                f"⚠️ This command requires **{required_tier_name}** tier, but this server is on **{current_tier_name}** tier.\n"
+                f"Please upgrade to access this feature."
+            )
+            return False, error_message
+            
+        return True, ""
+    except Exception as e:
+        logger.error(f"Error in check_premium_tier: {e}")
+        return False, "⚠️ Could not verify premium status. Please try again later."
+
 def premium_tier_required(tier: int = 1) -> Callable[[F], F]:
     """
     Decorator to restrict command access based on guild premium tier
     
     Args:
-        tier: Minimum premium tier required (0 = free, 1 = premium, 2 = enterprise)
+        tier: Minimum premium tier required (0 = survivor, 1 = warlord, 2 = overseer)
         
     Returns:
         Decorated function that checks premium tier before execution
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        async def wrapper(self: Any, ctx: DiscordContext, *args: Any, **kwargs: Any) -> Any:
+            # Check premium tier
+            has_required_tier, error_message = await check_premium_tier(ctx, tier)
+            
+            if not has_required_tier:
+                await ctx.respond(error_message, ephemeral=True)
+                return None
+                
+            # Execute the function if the tier is sufficient
+            return await func(self, ctx, *args, **kwargs)
+        
+        # Add an attribute to the function for easy checking
+        setattr(wrapper, '_premium_tier_required', tier)
+        
+        return cast(F, wrapper)
+    
+    return decorator
+
+def premium_feature_required(feature: str) -> Callable[[F], F]:
+    """
+    Decorator to restrict command access based on guild premium features
+    
+    Args:
+        feature: Feature name (e.g., 'faction_system', 'advanced_stats')
+        
+    Returns:
+        Decorated function that checks premium features before execution
     """
     def decorator(func: F) -> F:
         @functools.wraps(func)
@@ -36,37 +162,55 @@ def premium_tier_required(tier: int = 1) -> Callable[[F], F]:
             if ctx.guild is None:
                 return await func(self, ctx, *args, **kwargs)
             
-            # Get the guild's premium tier
-            db = await Database.get_instance()
-            guild_tier = await db.get_guild_premium_tier(ctx.guild.id)
-            
-            # Check if the guild meets the premium tier requirement
-            # Convert string tiers to numeric
-            numeric_guild_tier = 0  # default to free
-            if isinstance(guild_tier, str):
-                if guild_tier == "premium":
-                    numeric_guild_tier = 1
-                elif guild_tier == "enterprise":
-                    numeric_guild_tier = 2
-            elif isinstance(guild_tier, int):
-                numeric_guild_tier = guild_tier
+            try:
+                # Check if the guild has the required feature
+                db = await Database.get_instance()
+                if not db:
+                    logger.error(f"Failed to get database instance in premium_feature_required for {func.__name__}")
+                    await ctx.respond("⚠️ Could not verify feature access. Please try again later.", ephemeral=True)
+                    return None
                 
-            if numeric_guild_tier < tier:
-                tier_names = {0: "Survivor (Free)", 1: "Warlord (Premium)", 2: "Overseer (Enterprise)"}
-                required_tier = tier_names.get(tier, f"Tier {tier}")
-                current_tier = tier_names.get(numeric_guild_tier, f"Tier {numeric_guild_tier}")
+                # Get guild premium tier
+                guild_tier = await db.get_guild_premium_tier(ctx.guild.id)
+                numeric_guild_tier = TIER_MAPPING.get(guild_tier, 0)
                 
-                await ctx.respond(
-                    f"⚠️ This command requires **{required_tier}** tier, but this server is on **{current_tier}** tier.\n"
-                    f"Please upgrade to access this feature.", ephemeral=True
-                )
+                # Map features to required tiers
+                feature_tiers = {
+                    "basic_stats": 0,
+                    "killfeed": 0,
+                    "player_linking": 0,
+                    "faction_system": 1,
+                    "advanced_stats": 1,
+                    "rivalry_tracking": 1,
+                    "batch_processing": 1,
+                    "mission_alerts": 1,
+                    "extended_history": 2,
+                    "priority_support": 2,
+                    "custom_branding": 2
+                }
+                
+                required_tier = feature_tiers.get(feature, 1)  # Default to premium tier if feature unknown
+                
+                if numeric_guild_tier < required_tier:
+                    required_tier_name = TIER_DISPLAY_NAMES.get(required_tier, f"Tier {required_tier}")
+                    current_tier_name = TIER_DISPLAY_NAMES.get(numeric_guild_tier, f"Tier {numeric_guild_tier}")
+                    
+                    await ctx.respond(
+                        f"⚠️ The {feature.replace('_', ' ')} feature requires **{required_tier_name}** tier, "
+                        f"but this server is on **{current_tier_name}** tier.\n"
+                        f"Please upgrade to access this feature.", ephemeral=True
+                    )
+                    return None
+                
+                # Execute the function if the tier is sufficient
+                return await func(self, ctx, *args, **kwargs)
+            except Exception as e:
+                logger.error(f"Error in premium_feature_required for {func.__name__}: {e}")
+                await ctx.respond("⚠️ Could not verify feature access. Please try again later.", ephemeral=True)
                 return None
-            
-            # Execute the function if the tier is sufficient
-            return await func(self, ctx, *args, **kwargs)
         
-        # Add an attribute to the function for easy checking
-        setattr(wrapper, '_premium_tier_required', tier)
+        # Add attributes to the function for easy checking
+        setattr(wrapper, '_premium_feature_required', feature)
         
         return cast(F, wrapper)
     
@@ -131,6 +275,62 @@ def with_server_check(require_default: bool = True) -> Callable[[F], F]:
                     return None
             
             return await func(self, ctx, *args, **kwargs)
+        
+        return cast(F, wrapper)
+    
+    return decorator
+
+def check_server_limit() -> Callable[[F], F]:
+    """
+    Decorator to check if a guild has reached its server limit based on premium tier
+    
+    This is used for the server add command to prevent adding more servers than allowed.
+    
+    Returns:
+        Decorated function that checks server limits
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        async def wrapper(self: Any, ctx: DiscordContext, *args: Any, **kwargs: Any) -> Any:
+            from database.models import Server
+            from database.connection import Database
+            
+            if ctx.guild is None:
+                await ctx.respond("⚠️ This command can only be used in a server, not in DMs.", ephemeral=True)
+                return None
+            
+            try:
+                # Get the guild's servers and premium tier
+                servers = await Server.get_servers_for_guild(ctx.guild.id)
+                server_count = len(servers)
+                
+                # Get premium tier
+                db = await Database.get_instance()
+                numeric_guild_tier = await get_guild_numeric_tier(db, ctx.guild.id)
+                
+                # Get server limit based on tier
+                server_limit = TIER_MAX_SERVERS.get(numeric_guild_tier, 1)
+                
+                # Check if adding another server would exceed the limit
+                if server_count >= server_limit:
+                    tier_name = TIER_DISPLAY_NAMES.get(numeric_guild_tier, f"Tier {numeric_guild_tier}")
+                    next_tier = numeric_guild_tier + 1
+                    next_tier_name = TIER_DISPLAY_NAMES.get(next_tier, f"Tier {next_tier}")
+                    next_tier_limit = TIER_MAX_SERVERS.get(next_tier, server_limit + 5)
+                    
+                    await ctx.respond(
+                        f"⚠️ You have reached the maximum of **{server_limit}** servers allowed on the **{tier_name}** tier.\n"
+                        f"Upgrade to **{next_tier_name}** tier to add up to **{next_tier_limit}** servers.", 
+                        ephemeral=True
+                    )
+                    return None
+                
+                # Execute the function if within limits
+                return await func(self, ctx, *args, **kwargs)
+            except Exception as e:
+                logger.error(f"Error in check_server_limit for {func.__name__}: {e}")
+                await ctx.respond("⚠️ Could not verify server limits. Please try again later.", ephemeral=True)
+                return None
         
         return cast(F, wrapper)
     
