@@ -878,6 +878,7 @@ from cogs.mission_commands_refactored import MissionCommands
 from cogs.connection_commands import ConnectionCommands
 from cogs.admin_commands import AdminCommands
 from cogs.faction_commands import FactionCommands
+from cogs.notification_cog import NotificationCog
 
 # Import database connection
 from database.connection import Database
@@ -1041,7 +1042,8 @@ async def load_cogs():
         ConnectionCommands,
         MissionCommands,
         AdminCommands,
-        FactionCommands
+        FactionCommands,
+        NotificationCog
     ]
     
     loaded_count = 0
