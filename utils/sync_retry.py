@@ -3,6 +3,8 @@ Discord Command Synchronization with Rate Limit Handling
 
 This module provides utilities for safely synchronizing commands with Discord's API,
 handling rate limits gracefully and providing retry mechanisms.
+
+Includes both individual command registration and bulk registration approaches.
 """
 
 import logging
@@ -11,7 +13,9 @@ import asyncio
 import time
 import os
 import sys
+import random
 from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional, Union
 
 import discord
 from discord.ext import commands
@@ -20,16 +24,20 @@ from discord.http import Route
 logger = logging.getLogger('deadside_bot.utils.sync_retry')
 
 # Constants for rate limit handling
-SYNC_COOLDOWN = 60 * 60  # 1 hour in seconds
+SYNC_COOLDOWN = 60 * 60  # 1 hour in seconds between full command syncs
+NORMAL_COOLDOWN = 60 * 10  # 10 minutes between normal syncs
+STARTUP_COOLDOWN = 60  # 1 minute cooldown on first startup
 LAST_SYNC_FILE = ".last_command_check.txt"
+RATE_LIMIT_FILE = "./rate_limit_state.json"  # Stores rate limit state between restarts (without dot prefix to be visible)
 
 class CommandSyncManager:
     """Manages command synchronization with Discord API"""
     
     def __init__(self, bot):
         self.bot = bot
-        self.rate_limits = {}
+        self.rate_limits = self._load_rate_limits()
         self.last_sync_time = self._load_last_sync()
+        self.first_run = True  # Track if this is first run after startup
     
     def _load_last_sync(self):
         """Load the last sync time from file"""
@@ -54,16 +62,85 @@ class CommandSyncManager:
                 f.write(str(timestamp))
         except Exception as e:
             logger.error(f"Error saving last sync time: {e}")
+            
+    def _load_rate_limits(self):
+        """Load rate limit state from file"""
+        try:
+            if os.path.exists(RATE_LIMIT_FILE):
+                with open(RATE_LIMIT_FILE, "r") as f:
+                    data = json.load(f)
+                    
+                    # Convert reset_at strings back to datetime objects
+                    rate_limits = {}
+                    for path, info in data.items():
+                        if 'reset_at' in info:
+                            try:
+                                info['reset_at'] = datetime.fromtimestamp(info['reset_at'])
+                                rate_limits[path] = info
+                            except:
+                                # Skip any malformed entries
+                                pass
+                    
+                    logger.info(f"Loaded {len(rate_limits)} rate limit states from disk")
+                    return rate_limits
+        except Exception as e:
+            logger.error(f"Error loading rate limit state: {e}")
+        return {}
+        
+    def _save_rate_limits(self):
+        """Save current rate limit state to file"""
+        try:
+            # Convert datetimes to timestamps for JSON serialization
+            data_to_save = {}
+            for path, info in self.rate_limits.items():
+                # Deep copy to avoid modifying the original
+                path_data = dict(info)
+                if 'reset_at' in path_data and isinstance(path_data['reset_at'], datetime):
+                    path_data['reset_at'] = path_data['reset_at'].timestamp()
+                data_to_save[path] = path_data
+                
+            with open(RATE_LIMIT_FILE, "w") as f:
+                json.dump(data_to_save, f)
+        except Exception as e:
+            logger.error(f"Error saving rate limit state: {e}")
     
     async def is_recent_sync(self):
-        """Check if we've synced commands recently"""
+        """Check if we've synced commands recently using a smart cooldown system"""
         if not self.last_sync_time:
+            # First run ever, always sync
+            logger.info("No previous sync detected - initial sync required")
             return False
-            
-        # Check if it's been less than the cooldown period
+        
+        # Check if it's been less than the appropriate cooldown period
         now = datetime.now()
         time_since_sync = (now - self.last_sync_time).total_seconds()
-        return time_since_sync < SYNC_COOLDOWN
+        
+        # On first run after startup, use a shorter cooldown
+        if self.first_run:
+            if time_since_sync < STARTUP_COOLDOWN:
+                logger.info(f"Recent startup detected. Last sync was {time_since_sync:.1f}s ago (<{STARTUP_COOLDOWN}s startup cooldown)")
+                return True
+            else:
+                logger.info(f"First run after startup, but {time_since_sync:.1f}s since last sync (>{STARTUP_COOLDOWN}s startup cooldown)")
+                self.first_run = False
+                return False
+        
+        # For normal operation, use the standard cooldown logic
+        if time_since_sync < NORMAL_COOLDOWN:
+            logger.info(f"Skipping sync due to recent activity. Last sync was {time_since_sync:.1f}s ago (<{NORMAL_COOLDOWN}s normal cooldown)")
+            return True
+            
+        # For full syncs, we use a longer cooldown to avoid unnecessary API calls
+        if time_since_sync < SYNC_COOLDOWN:
+            # We still want to do lighter syncs between full syncs
+            # Here, we could check if there are new commands that need registration
+            # but for now, we'll just log that we're within the cooldown window
+            logger.info(f"Performing normal sync. Last full sync was {time_since_sync:.1f}s ago (<{SYNC_COOLDOWN}s full sync cooldown)")
+            return False
+            
+        # If it's been longer than the full sync cooldown, we need to do a full refresh
+        logger.info(f"Performing full sync. It's been {time_since_sync:.1f}s since last sync (>{SYNC_COOLDOWN}s full sync cooldown)")
+        return False
     
     async def collect_all_commands(self):
         """Collect all commands from cogs into a payload for registration"""
@@ -137,21 +214,48 @@ class CommandSyncManager:
             data = json.loads(await response.text())
             retry_after = data.get("retry_after", 5)
             
+            # Extract the bucket info from the headers or response if available
+            bucket = None
+            if hasattr(error, "route") and error.route:
+                bucket = error.route.bucket
+            
             # Log rate limit info
             path = str(response.url)
-            logger.warning(f"Rate limited on {path} - retry after {retry_after}s")
+            if bucket:
+                logger.warning(f"Rate limited on {path} (bucket: {bucket}) - retry after {retry_after}s")
+            else:
+                logger.warning(f"Rate limited on {path} - retry after {retry_after}s")
+            
+            # Add an extra buffer to prevent exactly hitting the rate limit
+            # Add 0.5-1.5 seconds of extra padding
+            buffer_time = 0.5 + (random.random() * 1.0)
+            actual_retry = retry_after + buffer_time
             
             # Store rate limit info for this path
             self.rate_limits[path] = {
-                "retry_after": retry_after,
-                "reset_at": datetime.now() + timedelta(seconds=retry_after)
+                "retry_after": actual_retry,
+                "reset_at": datetime.now() + timedelta(seconds=actual_retry),
+                "bucket": bucket,
+                "hit_count": self.rate_limits.get(path, {}).get("hit_count", 0) + 1,
+                "last_hit": datetime.now().timestamp()
             }
+            
+            try:
+                # Save rate limit state so it persists across restarts
+                self._save_rate_limits()
+                logger.info(f"Successfully saved rate limit state to {RATE_LIMIT_FILE}")
+            except Exception as save_error:
+                logger.error(f"Failed to save rate limit state: {save_error}")
+                import traceback
+                logger.error(traceback.format_exc())
             
             # If we have command info, log it
             if command:
                 logger.info(f"Rate limited while processing command: {command}")
         except Exception as e:
             logger.error(f"Error handling rate limit: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     async def should_retry(self, path):
         """Check if we should retry a request to a specific path"""
@@ -188,37 +292,79 @@ class CommandSyncManager:
             del self.rate_limits[path]
     
     async def register_commands_safely(self, commands_payload):
-        """Register commands with Discord with rate limit handling"""
+        """Register commands with Discord with rate limit handling and auto-retry"""
         if not self.bot.application_id:
             logger.error("No application ID available")
             return False
+        
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                # Get the route for registering global commands
+                route = Route("PUT", f"/applications/{self.bot.application_id}/commands")
+                
+                # Check for rate limits
+                if not await self.should_retry(str(route.url)):
+                    logger.info("Waiting for rate limit to expire before attempting command registration")
+                    await self.wait_for_rate_limit(str(route.url))
+                
+                # Make the request with detailed logging
+                logger.info(f"Attempting bulk command registration (attempt {retry_count+1}/{max_retries})")
+                await self.bot.http.request(route, json=commands_payload)
+                
+                # Success! Update last sync time
+                self.last_sync_time = datetime.now()
+                self._save_last_sync(self.last_sync_time)
+                
+                # Save rate limit state for future use
+                self._save_rate_limits()
+                
+                # Mark first run as complete
+                self.first_run = False
+                
+                logger.info(f"✅ Successfully registered {len(commands_payload)} commands with Discord")
+                return True
             
-        try:
-            # Get the route for registering global commands
-            route = Route("PUT", f"/applications/{self.bot.application_id}/commands")
-            
-            # Check for rate limits
-            if not await self.should_retry(str(route.url)):
-                await self.wait_for_rate_limit(str(route.url))
-            
-            # Make the request
-            await self.bot.http.request(route, json=commands_payload)
-            
-            # Update last sync time
-            self.last_sync_time = datetime.now()
-            self._save_last_sync(self.last_sync_time)
-            
-            return True
-        except discord.HTTPException as e:
-            # Handle rate limits
-            if e.status == 429:
-                await self.handle_rate_limit(e, "register_commands")
+            except discord.HTTPException as e:
+                # Handle rate limits with exponential backoff
+                if e.status == 429:
+                    retry_count += 1
+                    await self.handle_rate_limit(e, "register_commands")
+                    
+                    # Extract retry_after from response if possible
+                    retry_after = 1
+                    try:
+                        if hasattr(e, 'response') and e.response:
+                            data = json.loads(await e.response.text())
+                            retry_after = data.get('retry_after', 1)
+                    except:
+                        # Fallback to exponential backoff
+                        retry_after = (2 ** retry_count) * 5
+                    
+                    # Add some jitter to prevent thundering herd
+                    retry_after = retry_after * (0.8 + (0.4 * (time.time() % 1)))
+                    
+                    logger.warning(f"Rate limited on attempt {retry_count}/{max_retries}. "
+                                   f"Retrying in {retry_after:.2f}s...")
+                    
+                    # Wait before retry
+                    await asyncio.sleep(retry_after)
+                    continue
+                
+                # Other HTTP errors
+                logger.error(f"HTTP error registering commands: {e}")
                 return False
-            logger.error(f"HTTP error registering commands: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error registering commands: {e}")
-            return False
+                
+            except Exception as e:
+                logger.error(f"Error registering commands: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                return False
+        
+        logger.error(f"Failed to register commands after {max_retries} attempts")
+        return False
     
     async def sync_commands(self, force=False):
         """Synchronize commands with Discord"""

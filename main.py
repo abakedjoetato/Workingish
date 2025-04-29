@@ -640,14 +640,27 @@ async def sync_slash_commands():
                     logger.info("Waiting for Discord to process command clearing...")
                     await asyncio.sleep(5)
                     
-                    # Step 2: Register them all fresh
-                    # Create the commands in JSON format for Discord's API
+                    # Step 2: Register them all fresh using bulk registration
+                    if use_enhanced_sync:
+                        logger.info("Using enhanced bulk registration from sync_retry")
+                        success = await safe_command_sync(bot, force=True)
+                        if success:
+                            logger.info("✅ Bulk command registration successful")
+                            
+                            # Save registration timestamp to prevent frequent re-registration
+                            with open(last_refresh_file, "w") as f:
+                                f.write(str(time.time()))
+                            
+                            # Skip the individual registration since we're using bulk
+                            return True
+                        else:
+                            logger.warning("⚠️ Bulk command registration not fully successful")
+                    
+                    # Fallback to old method if bulk registration failed or isn't available
                     commands_payload = []
                     
-                    # Build up the JSON for all the commands we want to register...
-                    # ... (command definitions)
-                    
-                    # Register commands using the helper function that handles rate limits
+                    # Build up the JSON for all the commands we want to register through the old method
+                    # Register commands using the individual registration with rate limit handling
                     logger.info(f"Registering {len(commands_payload)} commands individually...")
                     registration_success = await register_commands_individually(bot, commands_payload)
                     
