@@ -17,15 +17,15 @@ def create_embed(
     description: str,
     color: discord.Color = discord.Color.blurple(),
     timestamp: bool = True,
-    footer_text: str = None,
-    footer_icon: str = None,
-    thumbnail: str = None,
-    image: str = None,
-    author_name: str = None,
-    author_icon: str = None,
-    author_url: str = None,
-    fields: list = None,
-    url: str = None,
+    footer_text: Optional[str] = "",
+    footer_icon: Optional[str] = "",
+    thumbnail: Optional[str] = "",
+    image: Optional[str] = "",
+    author_name: Optional[str] = "",
+    author_icon: Optional[str] = "",
+    author_url: Optional[str] = "",
+    fields: Optional[List[Dict[str, Any]]] = None,
+    url: Optional[str] = "",
 ) -> discord.Embed:
     """
     Create a Discord embed with consistent styling
@@ -83,7 +83,7 @@ def create_embed(
             
     return embed
 
-def format_timestamp(dt: datetime, format_type: str = "R") -> str:
+def format_timestamp(dt: Optional[datetime], format_type: str = "R") -> str:
     """
     Format a datetime object as a Discord timestamp
     
@@ -285,7 +285,7 @@ def create_basic_embed(title: str, description: str, color: discord.Color = None
         color=color
     )
     
-def create_player_embed(player_data: Dict[str, Any], server_name: str = None) -> discord.Embed:
+def create_player_embed(player_data: Dict[str, Any], server_name: Optional[str] = "") -> discord.Embed:
     """
     Create an embed displaying player statistics
     
@@ -368,7 +368,7 @@ def create_leaderboard_embed(
     leaderboard_data: List[Dict[str, Any]], 
     title: str = "Leaderboard",
     description: str = "Top players by kills",
-    server_name: str = None
+    server_name: Optional[str] = ""
 ) -> discord.Embed:
     """
     Create an embed displaying a player leaderboard
@@ -425,7 +425,7 @@ def create_leaderboard_embed(
     
     return embed
 
-def create_faction_embed(faction_data: Dict[str, Any], server_name: str = None) -> discord.Embed:
+def create_faction_embed(faction_data: Dict[str, Any], server_name: Optional[str] = "") -> discord.Embed:
     """
     Create an embed displaying faction information
     
@@ -641,7 +641,7 @@ def create_connection_embed(connection_data: Dict[str, Any]) -> discord.Embed:
     
     return embed
 
-def create_mission_embed(mission_data: Dict[str, Any], server_name: str = None) -> discord.Embed:
+def create_mission_embed(mission_data: Dict[str, Any], server_name: Optional[str] = "") -> discord.Embed:
     """
     Create an embed displaying mission information
     
@@ -736,7 +736,7 @@ def create_mission_embed(mission_data: Dict[str, Any], server_name: str = None) 
     
     return embed
 
-def create_batch_progress_embed(memory, description=None, color=None):
+def create_batch_progress_embed(memory: Any, description: Optional[str] = None, color: Optional[Any] = None) -> discord.Embed:
     """
     Create an embed for batch CSV parser progress
     

@@ -21,6 +21,7 @@ from cogs.connection_commands import ConnectionCommands
 from cogs.faction_commands import FactionCommands
 from cogs.notification_cog import NotificationCog
 from cogs.rivalry_commands import RivalryCommands
+from cogs.analytics_cog import AnalyticsCog
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -1055,8 +1056,9 @@ async def load_cogs():
         AdminCommands,
         FactionCommands,
         NotificationCog,
-        # Import the rivalry commands cog
-        RivalryCommands
+        RivalryCommands,
+        # Add the analytics cog for advanced statistics
+        AnalyticsCog
     ]
     
     loaded_count = 0

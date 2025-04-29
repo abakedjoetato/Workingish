@@ -160,8 +160,9 @@ class BatchCSVParser:
         # Save current state
         _, memory = await self.save_state()
         
-        # Create progress embed
-        embed = await create_batch_progress_embed(self.server_name, memory)
+        # Create progress embed with proper description
+        server_description = f"Processing historical data for server: {self.server_name}"
+        embed = create_batch_progress_embed(memory, server_description)
         
         try:
             if self.message:

@@ -17,6 +17,8 @@ The bot uses a modular design with commands organized by function:
 - **Mission Commands** - Configure mission notifications
 - **Faction Commands** - Manage player factions and alliances
 - **Admin Commands** - Administrative functionality
+- **Rivalry Commands** - View and manage player rivalries and relationships
+- **Analytics Commands** - Access detailed statistical analytics for servers, players, and factions
 
 Each command category is implemented as a Discord.py "cog" in the `cogs/` directory.
 
@@ -101,3 +103,66 @@ The bot implements a tiered permission system:
 - **Overseer (Enterprise)** - Adds expanded server limits and all premium features
 
 Commands automatically adjust their behavior based on the guild's subscription tier.
+
+## Analytics Commands
+
+The Analytics command group provides advanced statistical insights for servers, players, and factions. These commands are only available with Warlord (Premium) tier or higher.
+
+### /analytics server
+
+**Description:** Get detailed server analytics and statistics  
+**Premium Tier:** Warlord (Premium)  
+**Options:**
+- `time_period`: Time period in days [1, 7, 14, 30] (default: 7)
+- `server_index`: Index of server to use (default: 1)
+
+This command provides comprehensive server statistics including player count trends, peak hours, kill distribution, most active players, and weapon usage.
+
+### /analytics player
+
+**Description:** Get detailed player analytics and statistics  
+**Premium Tier:** Warlord (Premium)  
+**Options:**
+- `player_name`: Player name to search for (partial name search supported)
+- `time_period`: Time period in days [1, 7, 14, 30] (default: 7)
+- `server_index`: Index of server to use (default: 1)
+
+This command provides in-depth player statistics including K/D ratio trends, favorite weapons, activity patterns, and performance metrics.
+
+### /analytics player_by_id
+
+**Description:** Get detailed player analytics and statistics using exact Steam ID  
+**Premium Tier:** Warlord (Premium)  
+**Options:**
+- `player_id`: Steam ID of the player
+- `time_period`: Time period in days [1, 7, 14, 30] (default: 7)
+
+Use this command when you need to look up a specific player by their Steam ID rather than name.
+
+### /analytics leaderboard
+
+**Description:** Get server leaderboard with various sorting options  
+**Premium Tier:** Warlord (Premium)  
+**Options:**
+- `sort_by`: Stat to sort by ["kills", "kd", "distance"] (default: "kills")
+- `time_period`: Time period in days [0, 1, 7, 14, 30] (default: 7, 0 = all-time)
+- `server_index`: Index of server to use (default: 1)
+
+Shows the top players on your server with customizable sorting options.
+
+### /analytics faction
+
+**Description:** Get detailed analytics for a specific faction  
+**Premium Tier:** Warlord (Premium)  
+**Options:**
+- `faction_id`: ID of the faction
+- `time_period`: Time period in days [1, 7, 14, 30] (default: 7)
+
+Provides faction-level statistics including total kills, K/D ratio, active members, and faction rivalries.
+
+### /analytics factions
+
+**Description:** List all factions for easy reference  
+**Premium Tier:** Warlord (Premium)
+
+Shows a list of all factions on the server with their IDs for use with other faction commands.

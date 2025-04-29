@@ -190,7 +190,7 @@ class Player:
                 total_kills=0, total_deaths=0, faction_id=None, 
                 prey_id=None, prey_name=None, prey_kills=0,
                 nemesis_id=None, nemesis_name=None, nemesis_deaths=0,
-                _id=None):
+                first_seen=None, last_seen=None, _id=None):
         self.player_id = player_id
         self.player_name = player_name
         self.discord_id = discord_id
@@ -207,6 +207,10 @@ class Player:
         self.nemesis_id = nemesis_id
         self.nemesis_name = nemesis_name
         self.nemesis_deaths = nemesis_deaths
+        
+        # Tracking timestamps
+        self.first_seen = first_seen if first_seen else datetime.utcnow()
+        self.last_seen = last_seen if last_seen else datetime.utcnow()
         
         self._id = _id
         

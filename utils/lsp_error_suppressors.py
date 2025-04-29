@@ -15,6 +15,8 @@ import datetime
 # Discord Type Suppressors
 # ======================================================================
 
+# Base DiscordTask class is defined below
+
 class DiscordContext:
     """Type stub for discord.ApplicationContext to suppress LSP errors"""
     author: Any
@@ -139,19 +141,22 @@ class DiscordOption:
 
 class DiscordTask:
     """Type stub for discord.ext.tasks.loop to suppress LSP errors"""
-    is_running: bool
+    _running_state: bool = False
     
     def __init__(self, *args, **kwargs):
-        pass
+        self._running_state = False
     
     def start(self, *args, **kwargs) -> None:
-        pass
+        self._running_state = True
     
     def stop(self, *args, **kwargs) -> None:
-        pass
+        self._running_state = False
     
     def cancel(self, *args, **kwargs) -> None:
-        pass
+        self._running_state = False
+    
+    def is_running(self) -> bool:
+        return self._running_state
     
     def before_loop(self, func: Callable) -> Callable:
         return func
@@ -161,6 +166,9 @@ class DiscordTask:
     
     def error(self, func: Callable) -> Callable:
         return func
+    
+    def __call__(self, func: Callable) -> 'DiscordTask':
+        return self
 
 # ======================================================================
 # MongoDB Type Suppressors
@@ -194,13 +202,13 @@ class MongoCollection:
         pass
     
     async def count_documents(self, *args, **kwargs) -> int:
-        pass
+        return 0
     
     async def distinct(self, *args, **kwargs) -> List[Any]:
-        pass
+        return []
     
     async def aggregate(self, *args, **kwargs) -> Any:
-        pass
+        return []
 
 class MongoCursor:
     """Type stub for motor.motor_asyncio.AsyncIOMotorCursor to suppress LSP errors"""
@@ -209,7 +217,7 @@ class MongoCursor:
         return self
     
     async def __anext__(self) -> Dict[str, Any]:
-        pass
+        return {}
     
     def sort(self, *args, **kwargs) -> 'MongoCursor':
         return self
@@ -221,22 +229,23 @@ class MongoCursor:
         return self
     
     async def to_list(self, *args, **kwargs) -> List[Dict[str, Any]]:
-        pass
+        return []
     
     async def count(self) -> int:
-        pass
+        return 0
     
     async def distinct(self, *args, **kwargs) -> List[Any]:
-        pass
+        return []
 
 class MongoDatabase:
     """Type stub for motor.motor_asyncio.AsyncIOMotorDatabase to suppress LSP errors"""
     
     async def get_collection(self, name: str) -> MongoCollection:
-        pass
+        collection = MongoCollection()
+        return collection
     
     async def list_collection_names(self) -> List[str]:
-        pass
+        return []
 
 class MongoClient:
     """Type stub for motor.motor_asyncio.AsyncIOMotorClient to suppress LSP errors"""
@@ -245,13 +254,15 @@ class MongoClient:
         pass
     
     def __getitem__(self, name: str) -> MongoDatabase:
-        pass
+        db = MongoDatabase()
+        return db
     
     def get_database(self, name: str) -> MongoDatabase:
-        pass
+        db = MongoDatabase()
+        return db
     
     async def list_database_names(self) -> List[str]:
-        pass
+        return []
 
 # ======================================================================
 # Type Helpers for Model Classes
@@ -262,18 +273,18 @@ class MongoModel:
     _id: Any
     
     def to_dict(self) -> Dict[str, Any]:
-        pass
+        return {}
     
     async def update(self, db: Any) -> None:
         pass
     
     @classmethod
     async def create(cls, db: Any, **kwargs) -> Any:
-        pass
+        return cls()
     
     @classmethod
     async def get_by_id(cls, db: Any, id: Any) -> Optional[Any]:
-        pass
+        return cls()
 
 class PlayerModel(MongoModel):
     """Helper for Player model to suppress LSP errors"""
@@ -294,6 +305,14 @@ class PlayerModel(MongoModel):
     
     async def update_rivalry_data(self, db: Any, kill_event: Any = None, death_event: Any = None) -> None:
         pass
+        
+    @classmethod
+    async def get_by_player_id(cls, db: Any, player_id: str) -> Optional['PlayerModel']:
+        return None
+        
+    @classmethod
+    async def get_by_discord_id(cls, db: Any, discord_id: str) -> List['PlayerModel']:
+        return []
 
 class KillModel(MongoModel):
     """Helper for Kill model to suppress LSP errors"""
