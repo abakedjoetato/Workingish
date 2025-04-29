@@ -123,6 +123,32 @@ class Server:
         return None
     
     @classmethod
+    async def get_by_name(cls, db, name, guild_id):
+        """Get a server by name within a specific guild"""
+        try:
+            if not db:
+                logger.error("Database instance is None in Server.get_by_name")
+                return None
+                
+            if not name or not guild_id:
+                logger.error(f"Invalid parameters in Server.get_by_name: name={name}, guild_id={guild_id}")
+                return None
+            
+            collection = await db.get_collection(cls.collection_name)
+            data = await collection.find_one({"name": name, "guild_id": str(guild_id)})
+            
+            if data:
+                # MongoDB already has _id
+                id_value = data.get("_id")
+                if id_value:
+                    return data  # Return the raw document which can be used with get() method
+            return None
+                
+        except Exception as e:
+            logger.error(f"Error in get_by_name: {e}")
+            return None
+            
+    @classmethod
     async def get_by_guild(cls, db, guild_id):
         """Get all servers for a specific guild"""
         servers = []
@@ -138,7 +164,7 @@ class Server:
             
             try:
                 collection = await db.get_collection(cls.collection_name)
-                cursor = collection.find({"guild_id": guild_id})
+                cursor = collection.find({"guild_id": str(guild_id)})
                 
                 # Get the server docs from the cursor
                 docs = await cursor.to_list(None)
@@ -148,7 +174,7 @@ class Server:
                         # MongoDB already has _id, but ensure it's used correctly
                         id_value = data.get("_id") 
                         if id_value:
-                            servers.append(cls(**{**data, "_id": id_value}))
+                            servers.append(data)  # Return raw documents
                     except Exception as e:
                         logger.error(f"Error processing server data: {e}")
                         continue  # Skip this server but continue with others
@@ -161,20 +187,22 @@ class Server:
         
         return servers
     
-    async def update(self, db):
+    @classmethod
+    async def update(cls, db, server_id, updates):
         """Update server in the database"""
-        self.updated_at = datetime.utcnow()
-        data = self.to_dict()
-        collection = await db.get_collection(self.collection_name)
+        collection = await db.get_collection(cls.collection_name)
+        updates["updated_at"] = datetime.utcnow()
         await collection.update_one(
-            {"_id": self._id},
-            {"$set": data}
+            {"_id": server_id},
+            {"$set": updates}
         )
+        return True
         
-    async def delete(self, db):
+    @classmethod
+    async def delete(cls, db, server_id):
         """Delete server from the database"""
-        collection = await db.get_collection(self.collection_name)
-        await collection.delete_one({"_id": self._id})
+        collection = await db.get_collection(cls.collection_name)
+        await collection.delete_one({"_id": server_id})
         
     def to_dict(self):
         """Convert instance to dictionary for database storage"""
