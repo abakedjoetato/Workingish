@@ -42,7 +42,7 @@ def get_enum_objects():
     # Try to detect discord version and available enums
     if hasattr(discord, 'app_commands') and hasattr(discord.app_commands, 'AppCommandType'):
         logger.info("Using discord.app_commands enums")
-        # For newer discord.py versions
+        # For py-cord versions
         try:
             # Create integration type objects with compatible value attribute
             integration_type_guild = EnumWrapper(1)  # GUILD_INSTALL
@@ -257,7 +257,7 @@ async def optimized_command_sync(bot):
             # Ensure analytics group uses guild_only instead of contexts
             analytics_group = cog.analytics
             if hasattr(analytics_group, 'guild_only'):
-                analytics_group.guild_only = True
+                analytics_group.contexts=[discord.InteractionContextType.guild]
                 logger.info("Fixed analytics group guild_only parameter")
             
             # Remove any string contexts that cause errors
@@ -267,7 +267,7 @@ async def optimized_command_sync(bot):
                 if string_contexts:
                     # Remove string contexts and use guild_only instead
                     analytics_group.contexts = [c for c in analytics_group.contexts if not isinstance(c, str)]
-                    analytics_group.guild_only = True
+                    analytics_group.contexts=[discord.InteractionContextType.guild]
                     logger.info("Removed string contexts from analytics group")
     
     # 2. Deduplicate commands to ensure clean registration
@@ -303,7 +303,7 @@ async def optimized_command_sync(bot):
             if 'contexts' in cmd_dict:
                 contexts = cmd_dict['contexts']
                 if any(isinstance(c, str) for c in contexts):
-                    # Replace string contexts with guild_only=True
+                    # Replace string contexts with contexts=[discord.InteractionContextType.guild]
                     cmd_dict.pop('contexts', None)
                     cmd_dict['guild_only'] = True
             

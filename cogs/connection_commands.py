@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import logging
 import asyncio
 from database.connection import Database
@@ -13,7 +13,7 @@ connection_group = discord.SlashCommandGroup(
     name="connections",
     description="Commands for managing connection notifications",
     default_member_permissions=discord.Permissions(manage_channels=True),
-    guild_only=True  # Using guild_only=True for maximum compatibility
+    contexts=[discord.InteractionContextType.guild]  # Using contexts for maximum compatibility
 )
 
 class ConnectionCommands(commands.Cog):
@@ -78,7 +78,12 @@ class ConnectionCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error initializing connection trackers: {e}")
     
-    @connection_group.command(name="channel", description="Set the channel for connection notifications")
+    @connection_group.command(
+        name="channel",
+        description="Set the channel for connection notifications",
+        contexts=[discord.InteractionContextType.guild],
+        integration_types=[discord.ApplicationIntegrationType.guild_install],
+    )
     async def set_channel(self, ctx, 
                          channel: discord.Option(discord.TextChannel, "Channel to send notifications to", required=False) = None):
         """
@@ -127,9 +132,14 @@ class ConnectionCommands(commands.Cog):
                 
         except Exception as e:
             logger.error(f"Error setting connection channel: {e}")
-            await ctx.respond(f"⚠️ An error occurred: {e}")
-    
-    @connection_group.command(name="disable", description="Disable connection notifications for this guild")
+            await ctx.respond(f"❌ Error setting connection channel: {e}")
+            
+    @connection_group.command(
+        name="disable", 
+        description="Disable connection notifications for this guild", 
+        contexts=[discord.InteractionContextType.guild],
+        integration_types=[discord.ApplicationIntegrationType.guild_install],
+    )
     async def disable_connections(self, ctx):
         """Disable connection notifications for this guild"""
         try:
@@ -155,9 +165,14 @@ class ConnectionCommands(commands.Cog):
                 
         except Exception as e:
             logger.error(f"Error disabling connections: {e}")
-            await ctx.respond(f"⚠️ An error occurred: {e}")
-    
-    @connection_group.command(name="list", description="List recent player connections for a server")
+            await ctx.respond(f"❌ Error disabling connections: {e}")
+            
+    @connection_group.command(
+        name="list", 
+        description="List recent player connections for a server", 
+        contexts=[discord.InteractionContextType.guild],
+        integration_types=[discord.ApplicationIntegrationType.guild_install],
+    )
     async def list_connections(self, ctx, 
                                server_name: discord.Option(str, "Server name to show connections for", required=False) = None,
                                limit: discord.Option(int, "Number of connections to show (max: 20)", min_value=1, max_value=20, required=False) = 10):

@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import logging
 from datetime import datetime, timedelta
 import traceback
@@ -39,7 +39,7 @@ class ServerCommands(commands.Cog):
             self.db = self.bot.db
             logger.debug("Set database for ServerCommands cog from bot")
     
-    @server_group.command(name="list")
+    @server_group.command(name="list", contexts=[discord.InteractionContextType.guild],)
     async def list_servers(self, ctx):
         """List all servers configured for this Discord server"""
         try:
@@ -76,7 +76,7 @@ class ServerCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error listing servers: {e}")
             logger.error(traceback.format_exc())
-            await ctx.respond("⚠️ An error occurred while retrieving server list", ephemeral=True)
+            await ctx.respond("⚠️ An error occurred while listing servers", ephemeral=True)
     
     @server_group.command(name="add")
     @commands.has_permissions(manage_guild=True)
@@ -321,7 +321,7 @@ class ServerCommands(commands.Cog):
                 key_path
             )
             
-            await ctx.respond(f"✅ SFTP credentials for server '{name}' have been updated.", ephemeral=True)
+            await ctx.respond(f"✅ SFTP credentials have been updated.", ephemeral=True)
             
         except Exception as e:
             logger.error(f"Error setting credentials: {e}")

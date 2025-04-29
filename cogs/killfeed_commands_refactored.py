@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import logging
 import asyncio
 from datetime import datetime, timedelta
@@ -82,8 +82,8 @@ class KillfeedCommands(commands.Cog):
     
     @killfeed_group.command(
         name="channel",
-        description="Set a channel for killfeed notifications"
-    )
+        description="Set a channel for killfeed notifications", 
+        contexts=[discord.InteractionContextType.guild],)
     async def killfeed_channel(
         self, 
         ctx,
@@ -156,11 +156,12 @@ class KillfeedCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error setting killfeed channel: {e}")
-            await ctx.respond(f"❌ Error setting killfeed channel: {e}")
-    
+            await ctx.respond(f"❌ Error setting killfeed channel: {str(e)}", ephemeral=True)
+            
     @killfeed_group.command(
         name="toggle",
-        description="Enable or disable killfeed notifications"
+        description="Enable or disable killfeed notifications", 
+        contexts=[discord.InteractionContextType.guild],
     )
     async def killfeed_toggle(
         self,
@@ -240,11 +241,12 @@ class KillfeedCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error toggling killfeed notifications: {e}")
-            await ctx.respond(f"❌ Error toggling killfeed notifications: {e}")
-    
+            await ctx.respond(f"❌ Error toggling killfeed notifications: {str(e)}", ephemeral=True)
+            
     @killfeed_group.command(
         name="filter",
-        description="Customize which kills to show in killfeed"
+        description="Customize which kills to show in killfeed", 
+        contexts=[discord.InteractionContextType.guild],
     )
     async def killfeed_filter(
         self,
@@ -392,7 +394,7 @@ class KillfeedCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error updating killfeed filters: {e}")
-            await ctx.respond(f"❌ Error updating killfeed filters: {e}")
+            await ctx.respond(f"❌ Error updating killfeed filters: {str(e)}", ephemeral=True)
     
     @killfeed_group.command(
         name="status",
@@ -511,7 +513,7 @@ class KillfeedCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error checking killfeed status: {e}")
-            await ctx.respond(f"❌ Error checking killfeed status: {e}")
+            await ctx.respond(f"❌ Error checking killfeed status: {str(e)}", ephemeral=True)
     
     @killfeed_group.command(
         name="highlights",

@@ -5,7 +5,7 @@ This module provides Discord slash commands for accessing server and player anal
 """
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.commands import Option, SlashCommandGroup
 import logging
 from datetime import datetime, timedelta
@@ -31,10 +31,10 @@ class AnalyticsCog(commands.Cog):
         "analytics", 
         "Advanced statistics and analytics commands",
         default_member_permissions=None,
-        guild_only=True  # Using guild_only=True for maximum compatibility
-    )
+        contexts=[discord.InteractionContextType.guild]  # Using contexts=[discord.InteractionContextType.guild] for maximum compatibility,
+        integration_types=[discord.ApplicationIntegrationType.guild_install],)
     
-    @analytics.command(name="server", description="Get detailed server analytics and statistics")
+    @analytics.subcommand(name="server", description="Get detailed server analytics and statistics", contexts=[discord.InteractionContextType.guild],)
     @server_exists()
     @premium_server(tier=1)  # Warlord tier
     async def server_analytics(
@@ -136,10 +136,7 @@ class AnalyticsCog(commands.Cog):
             logger.error(f"Error in server_analytics: {e}")
             await ctx.respond(embed=error_embed(
                 "Error", 
-                f"An error occurred while fetching server analytics: {str(e)}"
-            ))
-    
-    @analytics.command(name="player", description="Get detailed player analytics and statistics")
+                f"An error occurred while fetching@analytics.subcommand(name="player", description="Get detailed player analytics and statistics", contexts=[discord.InteractionContextType.guild],)ption="Get detailed player analytics and statistics")
     @server_exists()
     @premium_server(tier=1)  # Warlord tier
     async def player_analytics(
@@ -325,9 +322,7 @@ class AnalyticsCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error in player_analytics: {e}")
             await ctx.respond(embed=error_embed(
-                "Error", 
-                f"An error occurred while fetching player analytics: {str(e)}"
-            ))
+                "Error"@analytics.subcommand(name="player_by_id", description="Get player analytics using exact Steam ID", contexts=[discord.InteractionContextType.guild],)
     
     @analytics.command(name="player_by_id", description="Get player analytics using exact Steam ID")
     @server_exists()
@@ -468,9 +463,7 @@ class AnalyticsCog(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error in player_analytics_by_id: {e}")
-            await ctx.respond(embed=error_embed(
-                "Error", 
-                f"An error occurred while fetching player analytics: {str(e)}"
+            await c@analytics.subcommand(name="leaderboard", description="Get server leaderboard with various sorting options", contexts=[discord.InteractionContextType.guild],)g player analytics: {str(e)}"
             ))
     
     @analytics.command(name="leaderboard", description="Get server leaderboard with various sorting options")
@@ -569,8 +562,7 @@ class AnalyticsCog(commands.Cog):
             await ctx.respond(embed=embed)
             
         except Exception as e:
-            logger.error(f"Error in leaderboard: {e}")
-            await ctx.respond(embed=error_embed(
+            logger.er@analytics.subcommand(name="faction", description="Get detailed faction analytics", contexts=[discord.InteractionContextType.guild],)d(
                 "Error", 
                 f"An error occurred while fetching leaderboard data: {str(e)}"
             ))
@@ -662,9 +654,7 @@ class AnalyticsCog(commands.Cog):
             
             await ctx.respond(embed=embed)
             
-        except Exception as e:
-            logger.error(f"Error in faction_analytics: {e}")
-            await ctx.respond(embed=error_embed(
+      @analytics.subcommand(name="factions", description="List all factions for easy reference", contexts=[discord.InteractionContextType.guild],)           await ctx.respond(embed=error_embed(
                 "Error", 
                 f"An error occurred while fetching faction analytics: {str(e)}"
             ))

@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import logging
 from datetime import datetime
 from bson import ObjectId
@@ -16,7 +16,7 @@ faction_group = discord.SlashCommandGroup(
     name="faction",
     description="Commands for managing player factions",
     default_member_permissions=discord.Permissions(manage_roles=True),
-    guild_only=True  # Using guild_only=True for maximum compatibility
+    contexts=[discord.InteractionContextType.guild]  # Using contexts=[discord.InteractionContextType.guild] for maximum compatibility
 )
 
 class FactionCommands(commands.Cog):
@@ -37,7 +37,7 @@ class FactionCommands(commands.Cog):
     def get_commands(self):
         return [faction_group]
         
-    @faction_group.command(name="create", description="Create a new faction")
+    @faction_group.subcommand(name="create", description="Create a new faction", contexts=[discord.InteractionContextType.guild],)
     @premium_tier_required(tier=1)
     @guild_only()
     async def create_faction(self, ctx, name: str, abbreviation: str):
@@ -130,9 +130,7 @@ class FactionCommands(commands.Cog):
         
         # Create and send the faction embed
         embed = await create_faction_embed(faction, ctx.guild)
-        await ctx.respond(f"✅ Faction '{name}' created successfully with abbreviation '{abbreviation.upper()}'!", embed=embed)
-        
-    @faction_group.command(name="info", description="View faction information")
+        await ctx.respond(f"✅ Faction '{name}' created successfully with abbreviation '@faction_group.subcommand(name="info", description="View faction information", contexts=[discord.InteractionContextType.guild],)(name="info", description="View faction information")
     @premium_tier_required(tier=1)
     async def faction_info(self, ctx, name: str = None):
         """
@@ -205,8 +203,7 @@ class FactionCommands(commands.Cog):
         member_stats["top_weapon"] = top_weapon[0][0] if top_weapon else "None"
         
         # Create and send the faction embed with member stats
-        embed = await create_faction_embed(faction, ctx.guild, member_stats)
-        await ctx.respond(embed=embed)
+        embed = await c@faction_group.subcommand(name="list", description="List all factions in this server", contexts=[discord.InteractionContextType.guild],)ed=embed)
         
     @faction_group.command(name="list", description="List all factions in this server")
     @premium_tier_required(tier=1)
@@ -234,9 +231,7 @@ class FactionCommands(commands.Cog):
             # Add field for each faction
             embed.add_field(
                 name=f"{faction.name} [{faction.abbreviation}]",
-                value=f"Members: {len(faction.members)}\nLeader: <@{faction.leader_id}>\nRole: {role_mention}",
-                inline=True
-            )
+                value=f"Members: {len(faction.members)}\nLea@faction_group.subcommand(name="invite", description="Invite a member to your faction", contexts=[discord.InteractionContextType.guild],)        )
             
         await ctx.respond(embed=embed)
         
@@ -312,8 +307,7 @@ class FactionCommands(commands.Cog):
         await ctx.respond(f"✅ {member.mention} has been added to the faction '{faction.name}'!")
         
         # Send a DM to the invited member
-        try:
-            await member.send(f"You have been added to the faction '{faction.name}' in {ctx.guild.name}!")
+        tr@faction_group.subcommand(name="leave", description="Leave your current faction", contexts=[discord.InteractionContextType.guild],)n.name}' in {ctx.guild.name}!")
         except:
             # Silently ignore if we can't DM the member
             pass
@@ -376,8 +370,7 @@ class FactionCommands(commands.Cog):
         try:
             current_name = ctx.author.display_name
             if current_name.startswith(f"{faction.abbreviation} "):
-                new_nickname = current_name[len(faction.abbreviation)+1:]
-                await ctx.author.edit(nick=new_nickname)
+ @faction_group.subcommand(name="remove", description="Remove a member from your faction", contexts=[discord.InteractionContextType.guild],)   await ctx.author.edit(nick=new_nickname)
         except:
             pass
             
@@ -434,10 +427,7 @@ class FactionCommands(commands.Cog):
         except:
             pass
             
-        await ctx.respond(f"✅ {member.mention} has been removed from the faction '{faction.name}'.")
-        
-        # Send a DM to the removed member
-        try:
+        await ctx.respond(f"✅ {member.mention} has been removed @faction_group.subcommand(name="transfer", description="Transfer faction leadership to another member", contexts=[discord.InteractionContextType.guild],)
             await member.send(f"You have been removed from the faction '{faction.name}' in {ctx.guild.name}.")
         except:
             # Silently ignore if we can't DM the member
@@ -477,7 +467,7 @@ class FactionCommands(commands.Cog):
         faction.leader_id = str(member.id)
         await faction.update(db)
             
-        await ctx.respond(f"✅ Leadership of faction '{faction.name}' has been transferred to {member.mention}.")
+        await ctx.@faction_group.subcommand(name="stats", description="View faction statistics", contexts=[discord.InteractionContextType.guild],){member.mention}.")
         
         # Send a DM to the new leader
         try:
@@ -588,11 +578,7 @@ class FactionCommands(commands.Cog):
         # Create a simplified embed for the faction stats in the requested format
         embed = discord.Embed(
             title=f"FACTION STATISTICS",
-            color=discord.Color.blue()
-        )
-        
-        # Format with aligned columns for clean display
-        embed.add_field(
+            color@faction_group.subcommand(name="leaderboard", description="View faction leaderboard for the server", contexts=[discord.InteractionContextType.guild],)        embed.add_field(
             name=f"{faction.name} [{faction.abbreviation}]",
             value=f"```\nKILLS         DEATHS        TOP WEAPON\n{total_kills:<14}{total_deaths:<14}{top_weapon}\n```",
             inline=False

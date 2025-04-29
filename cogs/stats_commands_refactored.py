@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import logging
 import asyncio
 import datetime
@@ -39,8 +39,8 @@ class StatsCommands(commands.Cog):
     
     @stats_group.command(
         name="player",
-        description="View detailed statistics for a player"
-    )
+        description="View detailed statistics for a player", 
+        contexts=[discord.InteractionContextType.guild],)
     async def stats_player(
         self, 
         ctx, 
@@ -162,11 +162,12 @@ class StatsCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error in stats_player: {e}")
-            await ctx.respond(f"❌ Error retrieving player stats: {e}")
-    
+            await ctx.respond(f"⚠️ Error retrieving player stats: {str(e)}", ephemeral=True)
+            
     @stats_group.command(
         name="leaderboard",
-        description="View server leaderboard"
+        description="View server leaderboard", 
+        contexts=[discord.InteractionContextType.guild],
     )
     async def stats_leaderboard(
         self, 
@@ -241,11 +242,12 @@ class StatsCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error in stats_leaderboard: {e}")
-            await ctx.respond(f"❌ Error retrieving leaderboard: {e}")
-    
+            await ctx.respond(f"⚠️ Error retrieving leaderboard: {str(e)}", ephemeral=True)
+            
     @stats_group.command(
         name="weapons",
-        description="View weapon usage statistics for a server"
+        description="View weapon usage statistics for a server",
+        contexts=[discord.InteractionContextType.guild],
     )
     async def stats_weapons(
         self, 
@@ -333,7 +335,7 @@ class StatsCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error in stats_weapons: {e}")
-            await ctx.respond(f"❌ Error retrieving weapon stats: {e}")
+            await ctx.respond(f"⚠️ Error retrieving weapon stats: {str(e)}", ephemeral=True)
     
     @stats_group.command(
         name="deaths",
@@ -600,7 +602,7 @@ class StatsCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error in stats_deaths: {e}")
-            await ctx.respond(f"❌ Error retrieving death statistics: {e}")
+            await ctx.respond(f"⚠️ Error retrieving death statistics: {str(e)}", ephemeral=True)
     
     @stats_group.command(
         name="link",
@@ -734,7 +736,7 @@ class StatsCommands(commands.Cog):
             )
             
             # Add note about alt count
-            embed.set_footer(text=f"Main character now has {len(alt_list)} linked alt(s)")
+            embed.set_footer(text=f"Main character now has {len(alt_list)} linked alts")
             
             await ctx.respond(embed=embed)
             
@@ -941,7 +943,7 @@ class StatsCommands(commands.Cog):
                 )
             
             # Set footer with timestamp
-            embed.set_footer(text=f"Server: {server['name']} | Premium Feature")
+            embed.set_footer(text=f"Server: {server['name']} | Data as of {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
             
             await ctx.respond(embed=embed)
             

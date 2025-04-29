@@ -19,7 +19,7 @@ from typing import List, Dict, Any, Optional, Union
 
 import discord
 from discord.ext import commands, tasks
-# The Route import is only needed for type hints, we don't actually use it
+from discord.http import Route
 
 logger = logging.getLogger('deadside_bot.utils.sync_retry')
 

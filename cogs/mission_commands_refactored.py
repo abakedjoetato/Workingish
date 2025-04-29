@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import logging
 import asyncio
 from datetime import datetime, timedelta
@@ -78,8 +78,8 @@ class MissionCommands(commands.Cog):
     
     @mission_group.command(
         name="channel",
-        description="Set a channel for mission notifications"
-    )
+        description="Set a channel for mission notifications", 
+        contexts=[discord.InteractionContextType.guild],)
     async def mission_channel(
         self, 
         ctx,
@@ -151,11 +151,12 @@ class MissionCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error setting mission channel: {e}")
-            await ctx.respond(f"❌ Error setting mission channel: {e}")
-    
+            await ctx.respond(f"❌ Error setting mission channel: {str(e)}", ephemeral=True)
+            
     @mission_group.command(
         name="toggle",
-        description="Enable or disable mission notifications"
+        description="Enable or disable mission notifications", 
+        contexts=[discord.InteractionContextType.guild],
     )
     async def mission_toggle(
         self,
@@ -235,11 +236,12 @@ class MissionCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error toggling mission notifications: {e}")
-            await ctx.respond(f"❌ Error toggling mission notifications: {e}")
-    
+            await ctx.respond(f"❌ Error toggling mission notifications: {str(e)}", ephemeral=True)
+            
     @mission_group.command(
         name="status",
-        description="Check mission notification settings"
+        description="Check mission notification settings",
+        contexts=[discord.InteractionContextType.guild],
     )
     async def mission_status(self, ctx):
         """Check the current mission notification settings"""
@@ -366,11 +368,12 @@ class MissionCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error checking mission status: {e}")
-            await ctx.respond(f"❌ Error checking mission status: {e}")
+            await ctx.respond(f"❌ Error checking mission status: {str(e)}", ephemeral=True)
     
     @mission_group.command(
         name="test",
-        description="Send a test mission notification"
+        description="Send a test mission notification",
+        contexts=[discord.InteractionContextType.guild]
     )
     async def mission_test(
         self,
