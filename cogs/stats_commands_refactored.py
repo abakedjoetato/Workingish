@@ -39,11 +39,8 @@ class StatsCommands(commands.Cog):
     
     @stats_group.command(
         name="player",
-        description="View detailed statistics for a player", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@stats_group.command(
-        name="player",
-        description="View detailed statistics for a player", 
-        contexts=[discord.InteractionContextType.guild],)
+        description="View detailed statistics for a player"
+    )
     async def stats_player(
         self, 
         ctx, 
@@ -161,13 +158,14 @@ class StatsCommands(commands.Cog):
             except Exception as e:
                 logger.error(f"Error adding rivalry information: {e}")
             
-            await ctx.respond(@stats_group.command(
+            await ctx.respond(embed=embed)
+        except Exception as e:
+            logger.error(f"Error retrieving player stats: {e}")
+            await ctx.respond(f"⚠️ Error retrieving player statistics: {str(e)}", ephemeral=True)
+            
+    @stats_group.command(
         name="leaderboard",
-        description="View server leaderboard", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@stats_group.command(
-        name="leaderboard",
-        description="View server leaderboard", 
-        contexts=[discord.InteractionContextType.guild],
+        description="View server leaderboard"
     )
     async def stats_leaderboard(
         self, 
@@ -239,13 +237,13 @@ class StatsCommands(commands.Cog):
             # Create the leaderboard embed
             embed = await create_leaderboard_embed(server, players, stat_type, timeframe)
             await ctx.respond(embed=embed)
-@stats_group.command(
+        except Exception as e:
+            logger.error(f"Error in stats_leaderboard: {e}")
+            await ctx.respond(f"⚠️ Error retrieving leaderboard: {str(e)}", ephemeral=True)
+            
+    @stats_group.command(
         name="weapons",
-        description="View weapon usage statistics for a server",
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@stats_group.command(
-        name="weapons",
-        description="View weapon usage statistics for a server",
-        contexts=[discord.InteractionContextType.guild],
+        description="View weapon usage statistics for a server"
     )
     async def stats_weapons(
         self, 
@@ -329,11 +327,10 @@ class StatsCommands(commands.Cog):
             total_kills = sum(stat['kills'] for stat in weapon_stats)
             embed.set_footer(text=f"Server: {server['name']} | Total kills analyzed: {total_kills}")
             
-            await c@stats_group.command(
-        name="deaths",
-        description="View death statistics for a player or server", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@stats_group.command(
-        name="deaths",
-        description="View death statistics for a player or server", contexts=[discord.InteractionContextType.guild],): {e}")
+            await ctx.respond(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving weapon stats: {e}")
             await ctx.respond(f"⚠️ Error retrieving weapon stats: {str(e)}", ephemeral=True)
     
     @stats_group.command(
@@ -591,11 +588,11 @@ class StatsCommands(commands.Cog):
                     embed.add_field(
                         name="Deadliest Weapons",
                         value=weapons_text,
-                 @stats_group.command(
-        name="link",
-        description="Link main and alt character accounts for combined statistics", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@stats_group.command(
-        name="link",
-        description="Link main and alt character accounts for combined statistics", contexts=[discord.InteractionContextType.guild],)Server: {server['name']} | Data as of {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+                        inline=True
+                    )
+                
+                # Add footer with server and timestamp
+                embed.set_footer(text=f"Server: {server['name']} | Data as of {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
             
             await ctx.respond(embed=embed)
             
@@ -724,11 +721,9 @@ class StatsCommands(commands.Cog):
             
             embed.add_field(
                 name="Character Details",
-                value=f"**Main:** {main_nam@stats_group.command(
-        name="rivals",
-        description="View your top rivals (nemesis and prey, contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@stats_group.command(
-        name="rivals",
-        description="View your top rivals (nemesis and prey, contexts=[discord.InteractionContextType.guild],)      
+                value=f"**Main:** {main_name}\n**Alt:** {alt_name}",
+                inline=False
+            )
             embed.add_field(
                 name="What This Means",
                 value="Statistics for both characters will be shown together in player lookups. The bot will use the main character's name for killfeed and other displays.",
@@ -925,11 +920,10 @@ class StatsCommands(commands.Cog):
                     "is_suicide": False
                 }},
                 {"$group": {
-  @stats_group.command(
-        name="factions",
-        description="View faction statistics", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@stats_group.command(
-        name="factions",
-        description="View faction statistics", contexts=[discord.InteractionContextType.guild],)               {"$sort": {"count": -1}},
+                    "_id": "$weapon",
+                    "count": {"$sum": 1}
+                }},
+                {"$sort": {"count": -1}},
                 {"$limit": 3}
             ]
             

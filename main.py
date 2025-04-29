@@ -474,192 +474,187 @@ async def sync_slash_commands():
         
         # Command fixes are now applied permanently in source files
         logger.info("✅ Using permanently fixed command definitions from source files")
-            
-            # Get home_guild_id for guild-specific command registration
-            home_guild_id = None
-            
-            # Check if we have a home_guild_id already set on the bot
-            if hasattr(bot, 'home_guild_id'):
-                home_guild_id = bot.home_guild_id
-                logger.info(f"✅ Using existing home guild ID: {home_guild_id}")
-            
-            # If we don't have a home guild ID yet, try to get it from database
-            if not home_guild_id:
-                try:
-                    if hasattr(bot, 'db'):
-                        # Try to get from the database
-                        home_guild_id = await bot.db.get_home_guild_id()
-                        if home_guild_id:
-                            logger.info(f"✅ Retrieved home guild ID from database: {home_guild_id}")
-                    else:
-                        logger.warning("❓ Bot doesn't have db attribute yet, checking MongoDB directly")
-                        # Try to get directly from MongoDB
-                        from motor.motor_asyncio import AsyncIOMotorClient
-                        client = AsyncIOMotorClient(os.getenv("MONGODB_URI", "mongodb://localhost:27017"))
-                        db = client[os.getenv("MONGODB_DB", "discord_stats_bot")]
-                        config_collection = db["config"]
-                        
-                        home_guild_doc = await config_collection.find_one({"_id": "home_guild"})
-                        if home_guild_doc and "guild_id" in home_guild_doc:
-                            home_guild_id = int(home_guild_doc["guild_id"])
-                            logger.info(f"✅ Retrieved home guild ID from MongoDB: {home_guild_id}")
-                except Exception as db_err:
-                    logger.error(f"❌ Error retrieving home guild ID: {db_err}")
-            
-            # If we still don't have a home guild ID, use the first guild the bot is in
-            if not home_guild_id:
-                logger.warning("⚠️ No home guild ID found, using first available guild")
-                # Wait for bot to be fully connected
-                await asyncio.sleep(5)
-                
-                # Get the first guild the bot is in
-                if bot.guilds:
-                    home_guild_id = bot.guilds[0].id
-                    logger.info(f"✅ Using first available guild as home: {home_guild_id}")
-                else:
-                    logger.error("❌ Bot is not in any guilds yet, cannot register guild commands")
-                    return False
-            
-            # Now collect all commands for global registration with rate limit handling
-            logger.info(f"🌐 Collecting commands for global registration")
-            
-            # Collect all commands from cogs
-            commands_payload = []
-            
-            # Process each cog to collect commands
-            for cog_name, cog in bot.cogs.items():
-                if hasattr(cog, "get_commands") and callable(cog.get_commands):
-                    try:
-                        cog_commands = cog.get_commands()
-                        if cog_commands:
-                            for cmd in cog_commands:
-                                if hasattr(cmd, 'to_dict'):
-                                    cmd_payload = cmd.to_dict()
-                                    commands_payload.append(cmd_payload)
-                                    logger.info(f"Added command: {cmd.name}")
-                    except Exception as cog_err:
-                        logger.error(f"Error processing commands from cog {cog_name}: {cog_err}")
-            
-            # Add base commands (ping, commands)
-            ping_cmd = {
-                "name": "ping",
-                "description": "Check bot response time",
-                "type": 1
-            }
-            commands_payload.append(ping_cmd)
-            
-            help_cmd = {
-                "name": "commands",
-                "description": "Show available commands and help information",
-                "type": 1
-            }
-            commands_payload.append(help_cmd)
-            
-            # GLOBAL COMMAND REGISTRATION WITH STRICT RATE LIMIT HANDLING
-            # Try the more efficient batch approach first, but be ready to fall back to individual registrations
+        
+        # Get home_guild_id for guild-specific command registration
+        home_guild_id = None
+        
+        # Check if we have a home_guild_id already set on the bot
+        if hasattr(bot, 'home_guild_id'):
+            home_guild_id = bot.home_guild_id
+            logger.info(f"✅ Using existing home guild ID: {home_guild_id}")
+        
+        # If we don't have a home guild ID yet, try to get it from database
+        if not home_guild_id:
             try:
-                logger.info(f"Attempting global registration of {len(commands_payload)} commands with enhanced rate limit handling")
-                
-                # Divide commands into smaller batches to respect rate limits (max 5 operations per 5 seconds)
-                # We'll use even more conservative batches of 3 commands with 6-second delays
-                batch_size = 3
-                wait_time = 6  # seconds between batches
-                
-                # Define a helper function for rate-limited calls
-                async def register_with_rate_limit(endpoint, method, payload, retry_count=0, max_retries=3):
-                    try:
-                        return await bot.http.request(method, endpoint, json=payload)
-                    except Exception as e:
-                        if "rate limited" in str(e).lower() and retry_count < max_retries:
-                            # Parse the retry_after value if available
-                            retry_after = 5  # default
-                            try:
-                                if hasattr(e, 'response') and hasattr(e.response, 'json'):
-                                    data = await e.response.json()
-                                    if 'retry_after' in data:
-                                        retry_after = data['retry_after']
-                                        # Add buffer time
-                                        retry_after += 1
-                            except:
-                                # Use default + exponential backoff
-                                retry_after = 5 * (2 ** retry_count)
-                            
-                            logger.warning(f"Rate limited. Waiting {retry_after} seconds before retry {retry_count+1}/{max_retries}")
-                            await asyncio.sleep(retry_after)
-                            return await register_with_rate_limit(endpoint, method, payload, retry_count+1, max_retries)
-                        else:
-                            raise
-                
-                # First try batch registration in small groups
-                batches = [commands_payload[i:i+batch_size] for i in range(0, len(commands_payload), batch_size)]
-                
-                success_count = 0
-                for i, batch in enumerate(batches):
-                    try:
-                        logger.info(f"Registering batch {i+1}/{len(batches)} with {len(batch)} commands...")
-                        await register_with_rate_limit(
-                            f"/applications/{bot.application_id}/commands",
-                            "PUT",
-                            batch
-                        )
-                        success_count += len(batch)
-                        logger.info(f"✅ Batch {i+1} successful. {success_count}/{len(commands_payload)} commands registered")
-                        
-                        # Wait between batches to respect rate limits
-                        if i < len(batches) - 1:  # Don't wait after the last batch
-                            logger.info(f"Waiting {wait_time}s before next batch to respect rate limits...")
-                            await asyncio.sleep(wait_time)
-                    except Exception as batch_err:
-                        logger.error(f"❌ Error in batch {i+1}: {batch_err}")
-                        # If batch failed, try individual registration for this batch
-                        logger.warning(f"Falling back to one-by-one registration for batch {i+1}")
-                        for cmd in batch:
-                            try:
-                                await register_with_rate_limit(
-                                    f"/applications/{bot.application_id}/commands", 
-                                    "POST", 
-                                    cmd
-                                )
-                                success_count += 1
-                                logger.info(f"✅ Registered command: {cmd.get('name', 'Unknown')}")
-                                # Wait between individual commands to respect rate limits
-                                await asyncio.sleep(2)
-                            except Exception as cmd_err:
-                                logger.error(f"❌ Failed to register command {cmd.get('name', 'Unknown')}: {cmd_err}")
-                        
-                        # Slightly longer wait after a failed batch
-                        await asyncio.sleep(wait_time + 2)
-                
-                # Report success based on how many commands were registered
-                if success_count == len(commands_payload):
-                    logger.info(f"✅ SUCCESS: Registered all {success_count} commands globally")
-                    return True
-                elif success_count > 0:
-                    logger.warning(f"⚠️ PARTIAL SUCCESS: Registered {success_count}/{len(commands_payload)} commands globally")
-                    return True  # Still return true to avoid blocking bot startup
+                if hasattr(bot, 'db'):
+                    # Try to get from the database
+                    home_guild_id = await bot.db.get_home_guild_id()
+                    if home_guild_id:
+                        logger.info(f"✅ Retrieved home guild ID from database: {home_guild_id}")
                 else:
-                    logger.error(f"❌ FAILED: Could not register any commands globally")
-                    return False
+                    logger.warning("❓ Bot doesn't have db attribute yet, checking MongoDB directly")
+                    # Try to get directly from MongoDB
+                    from motor.motor_asyncio import AsyncIOMotorClient
+                    client = AsyncIOMotorClient(os.getenv("MONGODB_URI", "mongodb://localhost:27017"))
+                    db = client[os.getenv("MONGODB_DB", "discord_stats_bot")]
+                    config_collection = db["config"]
                     
-            except Exception as api_err:
-                logger.error(f"❌ Global command registration failed: {api_err}")
-                import traceback
-                logger.error(traceback.format_exc())
-                
-                # Fall back to using py-cord's sync_commands mechanism
+                    home_guild_doc = await config_collection.find_one({"_id": "home_guild"})
+                    if home_guild_doc and "guild_id" in home_guild_doc:
+                        home_guild_id = int(home_guild_doc["guild_id"])
+                        logger.info(f"✅ Retrieved home guild ID from MongoDB: {home_guild_id}")
+            except Exception as db_err:
+                logger.error(f"❌ Error retrieving home guild ID: {db_err}")
+            
+        # If we still don't have a home guild ID, use the first guild the bot is in
+        if not home_guild_id:
+            logger.warning("⚠️ No home guild ID found, using first available guild")
+            # Wait for bot to be fully connected
+            await asyncio.sleep(5)
+            
+            # Get the first guild the bot is in
+            if bot.guilds:
+                home_guild_id = bot.guilds[0].id
+                logger.info(f"✅ Using first available guild as home: {home_guild_id}")
+            else:
+                logger.error("❌ Bot is not in any guilds yet, cannot register guild commands")
+                return False
+        
+        # Now collect all commands for global registration with rate limit handling
+        logger.info(f"🌐 Collecting commands for global registration")
+        
+        # Collect all commands from cogs
+        commands_payload = []
+        
+        # Process each cog to collect commands
+        for cog_name, cog in bot.cogs.items():
+            if hasattr(cog, "get_commands") and callable(cog.get_commands):
                 try:
-                    logger.warning("⚠️ Attempting to use py-cord's sync mechanism as last resort")
-                    await bot.sync_commands()
-                    logger.info("✅ Successfully synced commands using py-cord's sync mechanism")
-                    return True
-                except Exception as sync_err:
-                    logger.error(f"❌ All sync methods failed: {sync_err}")
-                    return False
-        except Exception as e:
-            logger.error(f"❌ Error in command registration: {e}")
+                    cog_commands = cog.get_commands()
+                    if cog_commands:
+                        for cmd in cog_commands:
+                            if hasattr(cmd, 'to_dict'):
+                                cmd_payload = cmd.to_dict()
+                                commands_payload.append(cmd_payload)
+                                logger.info(f"Added command: {cmd.name}")
+                except Exception as cog_err:
+                    logger.error(f"Error processing commands from cog {cog_name}: {cog_err}")
+        
+        # Add base commands (ping, commands)
+        ping_cmd = {
+            "name": "ping",
+            "description": "Check bot response time",
+            "type": 1
+        }
+        commands_payload.append(ping_cmd)
+        
+        help_cmd = {
+            "name": "commands",
+            "description": "Show available commands and help information",
+            "type": 1
+        }
+        commands_payload.append(help_cmd)
+        
+        # GLOBAL COMMAND REGISTRATION WITH STRICT RATE LIMIT HANDLING
+        # Try the more efficient batch approach first, but be ready to fall back to individual registrations
+        try:
+            logger.info(f"Attempting global registration of {len(commands_payload)} commands with enhanced rate limit handling")
+            
+            # Divide commands into smaller batches to respect rate limits (max 5 operations per 5 seconds)
+            # We'll use even more conservative batches of 3 commands with 6-second delays
+            batch_size = 3
+            wait_time = 6  # seconds between batches
+            
+            # Define a helper function for rate-limited calls
+            async def register_with_rate_limit(endpoint, method, payload, retry_count=0, max_retries=3):
+                try:
+                    return await bot.http.request(method, endpoint, json=payload)
+                except Exception as e:
+                    if "rate limited" in str(e).lower() and retry_count < max_retries:
+                        # Parse the retry_after value if available
+                        retry_after = 5  # default
+                        try:
+                            if hasattr(e, 'response') and hasattr(e.response, 'json'):
+                                data = await e.response.json()
+                                if 'retry_after' in data:
+                                    retry_after = data['retry_after']
+                                    # Add buffer time
+                                    retry_after += 1
+                        except:
+                            # Use default + exponential backoff
+                            retry_after = 5 * (2 ** retry_count)
+                        
+                        logger.warning(f"Rate limited. Waiting {retry_after} seconds before retry {retry_count+1}/{max_retries}")
+                        await asyncio.sleep(retry_after)
+                        return await register_with_rate_limit(endpoint, method, payload, retry_count+1, max_retries)
+                    else:
+                        raise
+            
+            # First try batch registration in small groups
+            batches = [commands_payload[i:i+batch_size] for i in range(0, len(commands_payload), batch_size)]
+            
+            success_count = 0
+            for i, batch in enumerate(batches):
+                try:
+                    logger.info(f"Registering batch {i+1}/{len(batches)} with {len(batch)} commands...")
+                    await register_with_rate_limit(
+                        f"/applications/{bot.application_id}/commands",
+                        "PUT",
+                        batch
+                    )
+                    success_count += len(batch)
+                    logger.info(f"✅ Batch {i+1} successful. {success_count}/{len(commands_payload)} commands registered")
+                    
+                    # Wait between batches to respect rate limits
+                    if i < len(batches) - 1:  # Don't wait after the last batch
+                        logger.info(f"Waiting {wait_time}s before next batch to respect rate limits...")
+                        await asyncio.sleep(wait_time)
+                except Exception as batch_err:
+                    logger.error(f"❌ Error in batch {i+1}: {batch_err}")
+                    # If batch failed, try individual registration for this batch
+                    logger.warning(f"Falling back to one-by-one registration for batch {i+1}")
+                    for cmd in batch:
+                        try:
+                            await register_with_rate_limit(
+                                f"/applications/{bot.application_id}/commands", 
+                                "POST", 
+                                cmd
+                            )
+                            success_count += 1
+                            logger.info(f"✅ Registered command: {cmd.get('name', 'Unknown')}")
+                            # Wait between individual commands to respect rate limits
+                            await asyncio.sleep(2)
+                        except Exception as cmd_err:
+                            logger.error(f"❌ Failed to register command {cmd.get('name', 'Unknown')}: {cmd_err}")
+                    
+                    # Slightly longer wait after a failed batch
+                    await asyncio.sleep(wait_time + 2)
+                
+            # Report success based on how many commands were registered
+            if success_count == len(commands_payload):
+                logger.info(f"✅ SUCCESS: Registered all {success_count} commands globally")
+                return True
+            elif success_count > 0:
+                logger.warning(f"⚠️ PARTIAL SUCCESS: Registered {success_count}/{len(commands_payload)} commands globally")
+                return True  # Still return true to avoid blocking bot startup
+            else:
+                logger.error(f"❌ FAILED: Could not register any commands globally")
+                return False
+                
+        except Exception as api_err:
+            logger.error(f"❌ Global command registration failed: {api_err}")
             import traceback
             logger.error(traceback.format_exc())
-            return False
+            
+            # Fall back to using py-cord's sync_commands mechanism
+            try:
+                logger.warning("⚠️ Attempting to use py-cord's sync mechanism as last resort")
+                await bot.sync_commands()
+                logger.info("✅ Successfully synced commands using py-cord's sync mechanism")
+                return True
+            except Exception as sync_err:
+                logger.error(f"❌ All sync methods failed: {sync_err}")
+                return False
         
         # Check if we can use the enhanced sync_retry module
         try:

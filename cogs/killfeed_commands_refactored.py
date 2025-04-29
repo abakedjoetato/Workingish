@@ -82,11 +82,8 @@ class KillfeedCommands(commands.Cog):
     
     @killfeed_group.command(
         name="channel",
-        description="Set a channel for killfeed notifications", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@killfeed_group.command(
-        name="channel",
-        description="Set a channel for killfeed notifications", 
-        contexts=[discord.InteractionContextType.guild],)
+        description="Set a channel for killfeed notifications"
+    )
     async def killfeed_channel(
         self, 
         ctx,
@@ -155,13 +152,14 @@ class KillfeedCommands(commands.Cog):
                 inline=False
             )
             
-            await ctx.respond(em@killfeed_group.command(
+            await ctx.respond(embed=embed)
+        except Exception as e:
+            logger.error(f"Error setting killfeed channel: {e}")
+            await ctx.respond(f"❌ Error setting killfeed channel: {str(e)}", ephemeral=True)
+            
+    @killfeed_group.command(
         name="toggle",
-        description="Enable or disable killfeed notifications", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@killfeed_group.command(
-        name="toggle",
-        description="Enable or disable killfeed notifications", 
-        contexts=[discord.InteractionContextType.guild],
+        description="Enable or disable killfeed notifications"
     )
     async def killfeed_toggle(
         self,
@@ -238,13 +236,13 @@ class KillfeedCommands(commands.Cog):
                 )
             
             await ctx.respond(embed=embed)
+        except Exception as e:
+            logger.error(f"Error toggling killfeed: {e}")
+            await ctx.respond(f"❌ Error toggling killfeed: {str(e)}", ephemeral=True)
+            
     @killfeed_group.command(
         name="filter",
-        description="Customize which kills to show in killfeed", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@killfeed_group.command(
-        name="filter",
-        description="Customize which kills to show in killfeed", 
-        contexts=[discord.InteractionContextType.guild],
+        description="Customize which kills to show in killfeed"
     )
     async def killfeed_filter(
         self,
@@ -388,12 +386,10 @@ class KillfeedCommands(commands.Cog):
                     inline=False
                 )
             
-            await ctx.resp@killfeed_group.command(
-        name="status",
-        description="Check killfeed notification settings", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@killfeed_group.command(
-        name="status",
-        description="Check killfeed notification settings", contexts=[discord.InteractionContextType.guild],)filters: {e}")
-            await ctx.respond(f"❌ Error updating killfeed filters: {str(e)}", ephemeral=True)
+            await ctx.respond(embed=embed)
+        except Exception as e:
+            logger.error(f"Error retrieving killfeed filters: {e}")
+            await ctx.respond(f"❌ Error retrieving killfeed filters: {str(e)}", ephemeral=True)
     
     @killfeed_group.command(
         name="status",
@@ -502,11 +498,10 @@ class KillfeedCommands(commands.Cog):
                             # Add to embed
                             embed.add_field(
                                 name="Recent Kills (1h)",
-                                value="\n".join(kills_text)[:1024],  #@killfeed_group.command(
-        name="highlights",
-        description="Configure special kill notifications", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@killfeed_group.command(
-        name="highlights",
-        description="Configure special kill notifications", contexts=[discord.InteractionContextType.guild],)pt Exception as kills_error:
+                                value="\n".join(kills_text)[:1024],
+                                inline=False
+                            )
+                except Exception as kills_error:
                     logger.error(f"Error getting recent kills: {kills_error}")
             
             await ctx.respond(embed=embed)

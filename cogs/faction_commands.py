@@ -129,7 +129,10 @@ class FactionCommands(commands.Cog):
         )
         
         # Create and send the faction embed
-        embe@faction_group.command(name="info", description="View faction information", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="info", description="View faction information", contexts=[discord.InteractionContextType.guild],)
+        embed = create_faction_embed(faction, ctx.guild)
+        await ctx.respond(embed=embed)
+        
+    @faction_group.command(name="info", description="View faction information")
     @premium_tier_required(tier=1)
     async def faction_info(self, ctx, name: str = None):
         """
@@ -201,7 +204,8 @@ class FactionCommands(commands.Cog):
         top_weapon = sorted(member_stats["weapon_counts"].items(), key=lambda x: x[1], reverse=True)
         member_stats["top_weapon"] = top_weapon[0][0] if top_weapon else "None"
         
-       @faction_group.command(name="list", description="List all factions in this server", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="list", description="List all factions in this server", contexts=[discord.InteractionContextType.guild],)_faction_embed(faction, ctx.guild, member_stats)
+        # Create faction embed
+        embed = create_faction_embed(faction, ctx.guild, member_stats)
         await ctx.respond(embed=embed)
         
     @faction_group.command(name="list", description="List all factions in this server")
@@ -224,7 +228,7 @@ class FactionCommands(commands.Cog):
         
         for faction in factions:
             # Get the faction role if it exists
-            role = discord.utils.get(ctx.guild.roles, id=int(faction.role_id)) if faction.@faction_group.command(name="invite", description="Invite a member to your faction", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="invite", description="Invite a member to your faction", contexts=[discord.InteractionContextType.guild],)         
+            role = discord.utils.get(ctx.guild.roles, id=int(faction.role_id)) if faction.role_id else None
             # Add field for each faction
             embed.add_field(
                 name=f"{faction.name} [{faction.abbreviation}]",
@@ -298,7 +302,8 @@ class FactionCommands(commands.Cog):
                     new_nickname = new_nickname[:32]
                 await member.edit(nick=new_nickname)
         except discord.Forbidden:
-            await ctx.respond(f"✅ {member.mention} has been added to the faction, but I co@faction_group.command(name="leave", description="Leave your current faction", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="leave", description="Leave your current faction", contexts=[discord.InteractionContextType.guild],)     except Exception as e:
+            await ctx.respond(f"✅ {member.mention} has been added to the faction, but I couldn't update their nickname (insufficient permissions)", ephemeral=True)
+        except Exception as e:
             await ctx.respond(f"✅ {member.mention} has been added to the faction, but I couldn't update their nickname: {e}", ephemeral=True)
             
         # Send success message
@@ -354,7 +359,9 @@ class FactionCommands(commands.Cog):
             return
             
         # Remove the member from the faction
- @faction_group.command(name="remove", description="Remove a member from your faction", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="remove", description="Remove a member from your faction", contexts=[discord.InteractionContextType.guild],)     
+        faction.members.remove(str(ctx.author.id))
+        await faction.update(db)
+        
         # Remove the faction role
         try:
             faction_role = discord.utils.get(ctx.guild.roles, id=int(faction.role_id)) if faction.role_id else None
@@ -405,7 +412,10 @@ class FactionCommands(commands.Cog):
             return
             
         # Remove the member from the faction
-        faction.members.remove(str(@faction_group.command(name="transfer", description="Transfer faction leadership to another member", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="transfer", description="Transfer faction leadership to another member", contexts=[discord.InteractionContextType.guild],)
+        faction.members.remove(str(member.id))
+        await faction.update(db)
+        
+        try:
             faction_role = discord.utils.get(ctx.guild.roles, id=int(faction.role_id)) if faction.role_id else None
             if faction_role:
                 await member.remove_roles(faction_role)
@@ -440,7 +450,8 @@ class FactionCommands(commands.Cog):
         """
         db = self.bot.db
         
-        # Check if the user i@faction_group.command(name="stats", description="View faction statistics", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="stats", description="View faction statistics", contexts=[discord.InteractionContextType.guild],)x.author.id), ctx.guild.id)
+        # Check if the user is in a faction
+        faction = await Faction.get_by_member(db, str(ctx.author.id), ctx.guild.id)
         if not faction:
             await ctx.respond("⚠️ You are not in a faction.", ephemeral=True)
             return
@@ -544,7 +555,9 @@ class FactionCommands(commands.Cog):
                         # Track weapon usage
                         weapon = kill.get("weapon", "Unknown")
                         if weapon in weapon_counts:
-                            weapon@faction_group.command(name="leaderboard", description="View faction leaderboard for the server", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="leaderboard", description="View faction leaderboard for the server", contexts=[discord.InteractionContextType.guild],)on] = 1
+                            weapon_counts[weapon] += 1
+                        else:
+                            weapon_counts[weapon] = 1
                 except Exception as e:
                     logger.error(f"Error retrieving weapon stats: {e}")
             
