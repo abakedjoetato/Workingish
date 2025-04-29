@@ -522,6 +522,172 @@ class CommandTester:
             "distance": kill_doc.get("distance", 0)
         }
     
+    async def test_analytics(self, server_id: Optional[str] = None) -> List[TestResult]:
+        """
+        Test analytics functionality
+        
+        Args:
+            server_id: Optional server ID to test with (uses first available if None)
+            
+        Returns:
+            List of test results
+        """
+        results = []
+        
+        # Test server analytics
+        if not server_id:
+            server_find_result = await self.test_method(
+                "Find Server For Analytics Testing",
+                self._test_find_server
+            )
+            results.append(server_find_result)
+            
+            if server_find_result.success and "server_id" in server_find_result.details:
+                server_id = server_find_result.details["server_id"]
+            else:
+                return results
+        
+        # Test server analytics
+        results.append(await self.test_method(
+            "Server Analytics (7 Days)",
+            self._test_server_analytics,
+            server_id,
+            7
+        ))
+        
+        # Test finding a player for analytics
+        player_find_result = await self.test_method(
+            "Find Player For Analytics Testing",
+            self._test_find_player_for_analytics,
+            server_id
+        )
+        results.append(player_find_result)
+        
+        if player_find_result.success and "player_id" in player_find_result.details:
+            player_id = player_find_result.details["player_id"]
+            
+            # Test player analytics
+            results.append(await self.test_method(
+                "Player Analytics (7 Days)",
+                self._test_player_analytics,
+                player_id,
+                7
+            ))
+        
+        # Test leaderboard
+        results.append(await self.test_method(
+            "Leaderboard (Kills)",
+            self._test_leaderboard_analytics,
+            server_id,
+            "kills",
+            7
+        ))
+        
+        results.append(await self.test_method(
+            "Leaderboard (K/D)",
+            self._test_leaderboard_analytics,
+            server_id,
+            "kd",
+            7
+        ))
+        
+        return results
+    
+    async def _test_server_analytics(self, server_id: str, time_period: int = 7) -> Dict[str, Any]:
+        """Test server analytics functionality"""
+        from utils.analytics import AnalyticsService
+        
+        analytics = await AnalyticsService.get_server_stats(server_id, time_period)
+        
+        # Validate required fields
+        required_fields = [
+            "total_kills", "suicide_count", "unique_players", 
+            "player_joins", "player_leaves", "top_weapons", 
+            "most_active_hours", "avg_kill_distance"
+        ]
+        
+        for field in required_fields:
+            if field not in analytics:
+                raise ValueError(f"Missing required field in server analytics: {field}")
+        
+        return {
+            "server_id": server_id,
+            "time_period": time_period,
+            "total_kills": analytics["total_kills"],
+            "unique_players": analytics["unique_players"],
+            "top_weapon": analytics["top_weapons"][0]["name"] if analytics["top_weapons"] else "None",
+            "avg_distance": analytics["avg_kill_distance"]
+        }
+    
+    async def _test_find_player_for_analytics(self, server_id: str) -> Dict[str, Any]:
+        """Find a player with kill data for analytics testing"""
+        db = await Database.get_instance()
+        kills_collection = await db.get_collection("kills")
+        
+        # Find a player who has kills on this server
+        kill = await kills_collection.find_one({
+            "server_id": server_id,
+            "is_suicide": False
+        }, sort=[("timestamp", -1)])
+        
+        if not kill:
+            raise ValueError(f"No kills found for server ID {server_id}")
+        
+        player_id = kill["killer_id"]
+        player_name = kill["killer_name"]
+        
+        return {
+            "player_id": player_id,
+            "player_name": player_name,
+            "server_id": server_id
+        }
+    
+    async def _test_player_analytics(self, player_id: str, time_period: int = 7) -> Dict[str, Any]:
+        """Test player analytics functionality"""
+        from utils.analytics import AnalyticsService
+        
+        analytics = await AnalyticsService.get_player_analytics(player_id, time_period)
+        
+        # Validate required fields
+        required_fields = [
+            "player_name", "total_kills", "total_deaths", "kd_ratio", 
+            "suicide_count", "favorite_weapons", "active_hours", 
+            "nemesis", "prey", "frequent_victims", "frequent_killers",
+            "improvement_percentage", "is_improving", "avg_kill_distance"
+        ]
+        
+        for field in required_fields:
+            if field not in analytics:
+                raise ValueError(f"Missing required field in player analytics: {field}")
+        
+        return {
+            "player_id": player_id,
+            "player_name": analytics["player_name"],
+            "time_period": time_period,
+            "kills": analytics["total_kills"],
+            "deaths": analytics["total_deaths"],
+            "kd_ratio": analytics["kd_ratio"],
+            "favorite_weapon": analytics["favorite_weapons"][0]["name"] if analytics["favorite_weapons"] else "None",
+            "most_active_hour": analytics["active_hours"][0]["hour"] if analytics["active_hours"] else -1
+        }
+    
+    async def _test_leaderboard_analytics(self, server_id: str, sort_by: str = "kills", time_period: int = 7) -> Dict[str, Any]:
+        """Test leaderboard analytics functionality"""
+        from utils.analytics import AnalyticsService
+        
+        leaderboard = await AnalyticsService.get_leaderboard(server_id, sort_by, 10, time_period)
+        
+        if not isinstance(leaderboard, list):
+            raise ValueError(f"Leaderboard is not a list: {type(leaderboard)}")
+        
+        return {
+            "server_id": server_id,
+            "sort_by": sort_by,
+            "time_period": time_period,
+            "entries": len(leaderboard),
+            "top_player": leaderboard[0]["player_name"] if leaderboard else "No players"
+        }
+    
     async def test_parser(self) -> List[TestResult]:
         """
         Test CSV parser functionality
@@ -660,6 +826,9 @@ async def run_all_tests():
     
     print("Running parser tests...")
     await tester.test_parser()
+    
+    print("Running analytics tests...")
+    await tester.test_analytics()
     
     print("Running Discord command tests...")
     await tester.test_discord_commands()

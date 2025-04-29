@@ -30,6 +30,7 @@ class AnalyticsCog(commands.Cog):
     analytics = SlashCommandGroup(
         "analytics", 
         "Advanced statistics and analytics commands",
+        default_member_permissions=None,
         guild_only=True
     )
     
