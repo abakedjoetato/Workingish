@@ -39,8 +39,9 @@ class StatsCommands(commands.Cog):
     
     @stats_group.command(
         name="player",
-        description="View detailed statistics for a player"
-    )
+        description="View detailed statistics for a player", 
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install])
     async def stats_player(
         self, 
         ctx, 
@@ -157,15 +158,17 @@ class StatsCommands(commands.Cog):
                     )
             except Exception as e:
                 logger.error(f"Error adding rivalry information: {e}")
-            
-            await ctx.respond(embed=embed)
+                logger.error(f"Error retrieving player stats: {e}")
+                await ctx.respond(f"⚠️ Error retrieving player statistics: {str(e)}", ephemeral=True)
         except Exception as e:
-            logger.error(f"Error retrieving player stats: {e}")
+            logger.error(f"Error in stats_player: {e}")
             await ctx.respond(f"⚠️ Error retrieving player statistics: {str(e)}", ephemeral=True)
             
     @stats_group.command(
         name="leaderboard",
-        description="View server leaderboard"
+        description="View server leaderboard",
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install]
     )
     async def stats_leaderboard(
         self, 
@@ -231,7 +234,7 @@ class StatsCommands(commands.Cog):
             players = await player_cursor.to_list(None)
             
             if not players:
-                await ctx.respond(f"❌ No players found for server '{server['name']}' in the selected timeframe")
+                await ctx.respond(f"❌ No player data found for server '{server['name']}'")
                 return
             
             # Create the leaderboard embed
@@ -316,7 +319,10 @@ class StatsCommands(commands.Cog):
             weapon_groups = [weapon_stats[i:i+5] for i in range(0, len(weapon_stats), 5)]
             
             for i, group in enumerate(weapon_groups):
-                weapon_text = "\n".join([f"**{stat['_id']}**: {stat['kills']} kills" for stat in group])
+                # Format weapon text
+                weapon_text = "\n".join([f"**{stat['_id'] or 'Unknown'}**: {stat['kills']} kills" for stat in group])
+                
+                # Add field to embed
                 embed.add_field(
                     name=f"Top Weapons {i*5+1}-{i*5+len(group)}",
                     value=weapon_text,
@@ -578,7 +584,7 @@ class StatsCommands(commands.Cog):
                         "count": {"$sum": 1}
                     }},
                     {"$sort": {"count": -1}},
-                    {"$limit": 5}
+                    {"$limit": 5}  # Top 5 deadliest weapons
                 ]
                 
                 weapons = await kills_collection.aggregate(weapon_pipeline).to_list(None)
@@ -707,13 +713,14 @@ class StatsCommands(commands.Cog):
             if alt_character["_id"] not in alt_list:
                 alt_list.append(alt_character["_id"])
                 
-            await players_collection.update_one(
-                {"_id": main_character["_id"]},
-                {"$set": {"alt_player_ids": alt_list}}
-            )
-            
-            # Create success embed
-            embed = discord.Embed(
+                # Update main character with alt IDs
+                await players_collection.update_one(
+                    {"_id": ObjectId(main_character["_id"])},
+                    {"$set": {"alt_player_ids": alt_list}}
+                )
+                
+                # Create success embed
+                embed = discord.Embed(
                 title="✅ Characters Linked Successfully",
                 description=f"'{alt_name}' is now linked as an alt of '{main_name}'",
                 color=discord.Color.green()

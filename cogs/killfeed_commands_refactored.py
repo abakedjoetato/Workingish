@@ -82,8 +82,9 @@ class KillfeedCommands(commands.Cog):
     
     @killfeed_group.command(
         name="channel",
-        description="Set a channel for killfeed notifications"
-    )
+        description="Set a channel for killfeed notifications", 
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install])
     async def killfeed_channel(
         self, 
         ctx,
@@ -151,7 +152,6 @@ class KillfeedCommands(commands.Cog):
                       "`/killfeed status` - Check notification settings",
                 inline=False
             )
-            
             await ctx.respond(embed=embed)
         except Exception as e:
             logger.error(f"Error setting killfeed channel: {e}")
@@ -159,7 +159,9 @@ class KillfeedCommands(commands.Cog):
             
     @killfeed_group.command(
         name="toggle",
-        description="Enable or disable killfeed notifications"
+        description="Enable or disable killfeed notifications", 
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install]
     )
     async def killfeed_toggle(
         self,
@@ -226,11 +228,12 @@ class KillfeedCommands(commands.Cog):
                                 value=f"Notifications will be sent to {channel.mention}",
                                 inline=False
                             )
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.error(f"Error getting channel: {e}")
+                        # Just continue without adding the field
             else:
                 embed = discord.Embed(
-                    title="Killfeed Notifications Disabled",
+                    title="❌ Killfeed Notifications Disabled",
                     description="You will no longer receive notifications for kills",
                     color=discord.Color.red()
                 )
@@ -503,6 +506,7 @@ class KillfeedCommands(commands.Cog):
                             )
                 except Exception as kills_error:
                     logger.error(f"Error getting recent kills: {kills_error}")
+                    # Continue without recent kills
             
             await ctx.respond(embed=embed)
             

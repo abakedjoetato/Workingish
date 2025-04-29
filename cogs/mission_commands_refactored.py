@@ -78,7 +78,9 @@ class MissionCommands(commands.Cog):
     
     @mission_group.command(
         name="channel",
-        description="Set a channel for mission notifications"
+        description="Set a channel for mission notifications", 
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install]
     )
     async def mission_channel(
         self, 
@@ -225,7 +227,7 @@ class MissionCommands(commands.Cog):
                         pass
             else:
                 embed = discord.Embed(
-                    title="Mission Notifications Disabled",
+                    title="❌ Mission Notifications Disabled",
                     description="You will no longer receive notifications for missions and events",
                     color=discord.Color.red()
                 )
@@ -350,6 +352,7 @@ class MissionCommands(commands.Cog):
                             )
                 except Exception as events_error:
                     logger.error(f"Error getting recent events: {events_error}")
+                    # Continue without recent events
             
             # Add premium status
             if not is_premium:

@@ -134,7 +134,7 @@ class ServerCommands(commands.Cog):
             logger.error(traceback.format_exc())
             await ctx.respond(f"⚠️ Error adding server: {str(e)}", ephemeral=True)
     
-    @server_group.command(name="info")
+    @server_group.command(name="info", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install])
     async def server_info(
         self, ctx, 
         name: discord.Option(str, "Name of the server to get info about")
@@ -219,7 +219,7 @@ class ServerCommands(commands.Cog):
             await Server.delete(self.db, server.get("_id", ""))
             
             embed = create_success_embed(
-                f"Server '{name}' removed",
+                "Server Removed",
                 "All server data has been deleted."
             )
             await ctx.respond(embed=embed)
@@ -309,7 +309,7 @@ class ServerCommands(commands.Cog):
                 
             # Verify access method is SFTP
             if server.get("access_method") != "sftp":
-                return await ctx.respond(f"Server '{name}' is not configured for SFTP access. Please update the server first.", ephemeral=True)
+                return await ctx.respond(f"⚠️ Server '{name}' is not configured for SFTP access. Please update the server first.", ephemeral=True)
                 
             # Create or update credentials
             server_id = server.get("_id", "")

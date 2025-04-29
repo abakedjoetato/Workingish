@@ -37,7 +37,7 @@ class FactionCommands(commands.Cog):
     def get_commands(self):
         return [faction_group]
         
-    @faction_group.command(name="create", description="Create a new faction", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@faction_group.command(name="create", description="Create a new faction", contexts=[discord.InteractionContextType.guild],)
+    @faction_group.command(name="create", description="Create a new faction", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install])
     @premium_tier_required(tier=1)
     @guild_only()
     async def create_faction(self, ctx, name: str, abbreviation: str):
@@ -128,7 +128,7 @@ class FactionCommands(commands.Cog):
             role_id=str(faction_role.id)
         )
         
-        # Create and send the faction embed
+        # Create embedded message with faction info
         embed = create_faction_embed(faction, ctx.guild)
         await ctx.respond(embed=embed)
         
@@ -198,9 +198,9 @@ class FactionCommands(commands.Cog):
                         else:
                             member_stats["weapon_counts"][weapon] = 1
                 except Exception as e:
-                    logger.error(f"Error retrieving weapon stats: {e}")
-        
-        # Find top weapon
+                    logger.error(f"Error processing member stats: {e}")
+                    
+        # Get top weapon used
         top_weapon = sorted(member_stats["weapon_counts"].items(), key=lambda x: x[1], reverse=True)
         member_stats["top_weapon"] = top_weapon[0][0] if top_weapon else "None"
         
@@ -222,7 +222,7 @@ class FactionCommands(commands.Cog):
         # Create an embed to display the factions
         embed = discord.Embed(
             title="Factions",
-            description=f"There are {len(factions)} factions in this server",
+            description="List of all factions in this server",
             color=discord.Color.blue()
         )
         
@@ -298,7 +298,7 @@ class FactionCommands(commands.Cog):
             current_name = member.display_name
             if not current_name.startswith(f"{faction.abbreviation}"):
                 new_nickname = f"{faction.abbreviation} {current_name}"
-                if len(new_nickname) > 32:  # Discord nickname limit
+                if len(new_nickname) > 32:  # Discord nickname limited to 32 chars
                     new_nickname = new_nickname[:32]
                 await member.edit(nick=new_nickname)
         except discord.Forbidden:
@@ -352,10 +352,10 @@ class FactionCommands(commands.Cog):
                 if current_name.startswith(f"{faction.abbreviation} "):
                     new_nickname = current_name[len(faction.abbreviation)+1:]
                     await ctx.author.edit(nick=new_nickname)
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Error resetting nickname: {e}")
                 
-            await ctx.respond(f"✅ You have left the faction '{faction.name}' and it has been deleted as you were the last member.")
+            await ctx.respond(f"✅ You have left faction '{faction.name}' and it has been deleted as you were the last member.")
             return
             
         # Remove the member from the faction
@@ -552,7 +552,6 @@ class FactionCommands(commands.Cog):
                     })
                     
                     async for kill in cursor:
-                        # Track weapon usage
                         weapon = kill.get("weapon", "Unknown")
                         if weapon in weapon_counts:
                             weapon_counts[weapon] += 1
