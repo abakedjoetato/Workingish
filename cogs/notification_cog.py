@@ -502,9 +502,9 @@ class NotificationCog(commands.Cog):
     
     @notifications_group.command(
         name="killfeed",
-        description="Configure automatic killfeed notifications for this server", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@notifications_group.command(
-        name="killfeed",
-        description="Configure automatic killfeed notifications for this server", contexts=[discord.InteractionContextType.guild],)
+        description="Configure automatic killfeed notifications for this server", 
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install])
     @commands.has_permissions(manage_channels=True)
     @guild_only()
     async def setup_killfeed(

@@ -45,9 +45,9 @@ class RivalryCommands(commands.Cog):
     
     @rivalry_group.command(
         name="update",
-        description="Update rivalry tracking data for a server [Premium Only]", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
-        name="update",
-        description="Update rivalry tracking data for a server [Premium Only]", contexts=[discord.InteractionContextType.guild],)
+        description="Update rivalry tracking data for a server [Premium Only]", 
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install])
     @premium_server()
     @server_exists()
     async def update_rivalry(
@@ -102,13 +102,16 @@ class RivalryCommands(commands.Cog):
                 inline=False
             )
             
-            await message.edit_original_re@rivalry_group.command(
+            await message.edit_original_response(embed=embed)
+        except Exception as e:
+            logger.error(f"Error processing top prey: {e}")
+            await ctx.respond(f"❌ Error processing top prey: {str(e)}")
+
+    @rivalry_group.command(
         name="nemesis",
         description="View nemesis information for a player [Premium Only]", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
-        name="nemesis",
-        description="View nemesis information for a player [Premium Only]", 
-        contexts=[discord.InteractionContextType.guild]
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install]
     )
     @premium_server()
     @server_exists()
@@ -212,13 +215,16 @@ class RivalryCommands(commands.Cog):
                 inline=True
             )
             
-          @rivalry_group.command(
+            await ctx.respond(embed=embed)
+        except Exception as e:
+            logger.error(f"Error processing nemesis: {e}")
+            await ctx.respond(f"❌ Error processing nemesis: {str(e)}")
+
+    @rivalry_group.command(
         name="prey",
         description="View prey information for a player [Premium Only]", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
-        name="prey",
-        description="View prey information for a player [Premium Only]", 
-        contexts=[discord.InteractionContextType.guild]
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install]
     )
     @premium_server()
     @server_exists()
@@ -322,13 +328,16 @@ class RivalryCommands(commands.Cog):
                 inline=True
             )
             
-            a@rivalry_group.command(
+            await ctx.respond(embed=embed)
+        except Exception as e:
+            logger.error(f"Error processing prey: {e}")
+            await ctx.respond(f"❌ Error processing prey: {str(e)}")
+            
+    @rivalry_group.command(
         name="relationships",
         description="View kill relationships between a player and others [Premium Only]", 
-        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
-        name="relationships",
-        description="View kill relationships between a player and others [Premium Only]", 
-        contexts=[discord.InteractionContextType.guild]
+        contexts=[discord.InteractionContextType.guild], 
+        integration_types=[discord.IntegrationType.guild_install]
     )
     @premium_server()
     @server_exists()
