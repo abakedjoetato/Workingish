@@ -83,16 +83,12 @@ class ServerCommands(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def add_server(
         self, ctx, 
-        name: discord.Option(str, "A name for the server"),
-        ip: discord.Option(str, "Server IP address"),
-        port: discord.Option(int, "Server port"),
-        log_path: discord.Option(str, "Path to log files directory"),
-        access_method: discord.Option(
-            str, 
-            "How to access logs (local/sftp)",
-            choices=["local", "sftp"],
-            default="local"
-        )
+        name: discord.Option(str, "A name for the server", required=True),
+        host: discord.Option(str, "Server IP address or hostname", required=True),
+        port: discord.Option(int, "Server port", required=True),
+        username: discord.Option(str, "SFTP username", required=True),
+        password: discord.Option(str, "SFTP password", required=True),
+        serverid: discord.Option(str, "Unique server ID used in directory names", required=True)
     ):
         """Add a new server to monitor"""
         try:
@@ -109,25 +105,34 @@ class ServerCommands(commands.Cog):
             if not can_add['success']:
                 return await ctx.respond(can_add['message'], ephemeral=True)
             
-            # Create new server
+            # Create the log_path using the pattern {host}_{serverid}
+            log_path = f"{host}_{serverid}"
+            
+            # Create new server with SFTP access
             server = await Server.create(self.db,
                 name=name,
-                ip=ip,
+                ip=host,
                 port=port,
                 log_path=log_path,
                 guild_id=str(ctx.guild.id),
-                access_method=access_method
+                access_method="sftp",
+                server_id=serverid
             )
             
-            # If it's SFTP, we'll need to follow up for credentials
-            if access_method == "sftp":
-                await ctx.respond("Server added! Since you selected SFTP access, please set up credentials using:\n"
-                              f"`/server credentials {name} <username> [password] [key_path]`")
-            else:
-                embed = create_success_embed(
-                    f"Server '{name}' added successfully!",
-                    f"Use `/server info {name}` to view details.")
-                await ctx.respond(embed=embed)
+            # Create credentials immediately
+            server_id = server.get("_id", "")
+            await AuthCredentials.set_credentials(
+                self.db,
+                server_id,
+                username,
+                password,
+                None  # No key path needed
+            )
+            
+            embed = create_success_embed(
+                f"Server '{name}' added successfully!",
+                f"Server has been configured with SFTP access to directory {log_path}\nUse `/server info {name}` to view details.")
+            await ctx.respond(embed=embed)
                 
         except Exception as e:
             logger.error(f"Error adding server: {e}")
