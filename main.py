@@ -209,8 +209,9 @@ async def register_commands_individually(bot, commands_payload):
                             except Exception as json_err:
                                 logger.error(f"Error parsing rate limit response: {json_err}")
                         
-                        # Add a safety margin to retry_after
-                        retry_after = retry_after * 1.2  # Add 20% buffer
+                        # Use a much longer buffer time to fully reset rate limits
+                        # 600 seconds (10 minutes) is significantly longer than Discord's default rate limits
+                        retry_after = max(retry_after, 600)  # Use at least 10 minutes
                         
                         if is_global:
                             # Update global rate limit
@@ -243,8 +244,10 @@ async def register_commands_individually(bot, commands_payload):
                             except Exception as e:
                                 logger.error(f"Error saving rate limit data: {e}")
                         
-                        # Add a bit of jitter to avoid slamming the API when many bots restart at once
-                        await asyncio.sleep(retry_after + random.uniform(1.0, 3.0))
+                        # Use a much longer wait time without additional jitter
+                        # This ensures we fully respect Discord's rate limits
+                        logger.warning(f"Using extended wait time of {retry_after}s for rate limit recovery")
+                        await asyncio.sleep(retry_after)
                         # Continue to next retry
                         continue
                     elif rate_err.status == 400:

@@ -27,6 +27,7 @@ logger = logging.getLogger('deadside_bot.utils.sync_retry')
 SYNC_COOLDOWN = 60 * 60  # 1 hour in seconds between full command syncs
 NORMAL_COOLDOWN = 60 * 10  # 10 minutes between normal syncs
 STARTUP_COOLDOWN = 60  # 1 minute cooldown on first startup
+RATE_LIMIT_BUFFER = 600  # 10 minutes (600 seconds) wait time after rate limit
 LAST_SYNC_FILE = ".last_command_check.txt"
 RATE_LIMIT_FILE = "./rate_limit_state.json"  # Stores rate limit state between restarts (without dot prefix to be visible)
 
@@ -226,10 +227,10 @@ class CommandSyncManager:
             else:
                 logger.warning(f"Rate limited on {path} - retry after {retry_after}s")
             
-            # Add an extra buffer to prevent exactly hitting the rate limit
-            # Add 0.5-1.5 seconds of extra padding
-            buffer_time = 0.5 + (random.random() * 1.0)
-            actual_retry = retry_after + buffer_time
+            # Use our configured RATE_LIMIT_BUFFER (10 minutes) to ensure we fully clear rate limits
+            # This much longer buffer prevents command registration from constantly hitting limits
+            logger.warning(f"Using extended buffer of {RATE_LIMIT_BUFFER}s instead of default {retry_after}s")
+            actual_retry = max(retry_after, RATE_LIMIT_BUFFER) # Use whichever is longer
             
             # Store rate limit info for this path
             self.rate_limits[path] = {
@@ -343,11 +344,11 @@ class CommandSyncManager:
                         # Fallback to exponential backoff
                         retry_after = (2 ** retry_count) * 5
                     
-                    # Add some jitter to prevent thundering herd
-                    retry_after = retry_after * (0.8 + (0.4 * (time.time() % 1)))
+                    # Use our much longer rate limit buffer to fully reset rate limits
+                    retry_after = max(retry_after, RATE_LIMIT_BUFFER)
                     
                     logger.warning(f"Rate limited on attempt {retry_count}/{max_retries}. "
-                                   f"Retrying in {retry_after:.2f}s...")
+                                   f"Using extended buffer of {RATE_LIMIT_BUFFER}s - retrying in {retry_after:.2f}s...")
                     
                     # Wait before retry
                     await asyncio.sleep(retry_after)
