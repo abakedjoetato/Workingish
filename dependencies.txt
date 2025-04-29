@@ -1,0 +1,34 @@
+# Dependencies for Discord Bot
+# These packages are required for the application to function properly
+# Install using: pip install -r dependencies.txt
+
+# Discord API
+discord-py>=2.3.2
+py-cord>=2.6.1
+
+# Database
+motor>=3.3.2
+pymongo>=4.6.1
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.28
+
+# Web and API
+flask>=3.0.0
+flask-login>=0.6.3
+flask-sqlalchemy>=3.1.1
+gunicorn>=22.0.0
+werkzeug>=3.0.1
+
+# Remote connections
+aiofiles>=23.2.1
+asyncssh>=2.14.0
+
+# Utilities
+python-dotenv>=1.0.0
+email-validator>=2.1.0
+python-dateutil>=2.8.2
+pandas>=2.1.4
+
+# Game server query (from package.json)
+# gamedig (Node.js package)
