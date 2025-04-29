@@ -11,6 +11,17 @@ import motor.motor_asyncio
 from pathlib import Path
 import time
 
+# Import all cog classes to avoid circular imports
+from cogs.admin_commands import AdminCommands
+from cogs.server_commands_refactored import ServerCommands
+from cogs.stats_commands_refactored import StatsCommands
+from cogs.killfeed_commands_refactored import KillfeedCommands
+from cogs.mission_commands_refactored import MissionCommands
+from cogs.connection_commands import ConnectionCommands
+from cogs.faction_commands import FactionCommands
+from cogs.notification_cog import NotificationCog
+from cogs.rivalry_commands import RivalryCommands
+
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
@@ -1043,7 +1054,9 @@ async def load_cogs():
         MissionCommands,
         AdminCommands,
         FactionCommands,
-        NotificationCog
+        NotificationCog,
+        # Import the rivalry commands cog
+        RivalryCommands
     ]
     
     loaded_count = 0

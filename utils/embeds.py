@@ -1,60 +1,49 @@
 """
-Embed Utilities
+Embeds Utility
 
-This module provides standardized Discord embeds for various command responses.
+This module provides utility functions for creating and formatting Discord embeds
+consistently across the application.
 """
 
 import discord
 from datetime import datetime
+import logging
+from typing import Dict, List, Any, Optional, Union
 
-# Standard colors for embeds
-COLORS = {
-    "success": 0x57F287,  # Green
-    "error": 0xED4245,    # Red
-    "info": 0x3498DB,     # Blue
-    "warning": 0xFEE75C,  # Yellow
-    "server": 0x9B59B6,   # Purple
-    "player": 0x1ABC9C,   # Teal
-    "killfeed": 0xE74C3C, # Dark Red
-    "mission": 0xF1C40F,  # Gold
-    "faction": 0x7289DA,  # Blurple
-    "connection": 0x00BFFF # Sky Blue
-}
+logger = logging.getLogger(__name__)
 
-EMOJIS = {
-    "success": "✅",
-    "error": "❌",
-    "info": "ℹ️",
-    "warning": "⚠️",
-    "add": "➕",
-    "remove": "➖",
-    "stats": "📊",
-    "player": "👤",
-    "server": "🖥️",
-    "mission": "🎯",
-    "clock": "⏱️",
-    "location": "📍",
-    "kill": "☠️",
-    "death": "💀",
-    "online": "🟢",
-    "offline": "🔴",
-    "faction": "👥",
-    "crown": "👑",
-    "tier": "🏆",
-    "connection": "🔗",
-    "money": "💰",
-    "xp": "📈"
-}
-
-def create_basic_embed(title, description=None, color="info", timestamp=True):
+def create_embed(
+    title: str,
+    description: str,
+    color: discord.Color = discord.Color.blurple(),
+    timestamp: bool = True,
+    footer_text: str = None,
+    footer_icon: str = None,
+    thumbnail: str = None,
+    image: str = None,
+    author_name: str = None,
+    author_icon: str = None,
+    author_url: str = None,
+    fields: list = None,
+    url: str = None,
+) -> discord.Embed:
     """
-    Create a basic embed with standardized formatting
+    Create a Discord embed with consistent styling
     
     Args:
-        title: Embed title
-        description: Optional embed description
-        color: Color of the embed (success, error, info, warning, etc.)
-        timestamp: Whether to include a timestamp
+        title: Title of the embed
+        description: Description text
+        color: Color of the embed
+        timestamp: Whether to include current timestamp
+        footer_text: Text to display in the footer
+        footer_icon: URL for footer icon
+        thumbnail: URL for thumbnail image
+        image: URL for main image
+        author_name: Name to display in author field
+        author_icon: URL for author icon
+        author_url: URL for author name
+        fields: List of field dictionaries with name, value, and inline keys
+        url: URL for the embed title
         
     Returns:
         discord.Embed: Formatted embed
@@ -62,851 +51,772 @@ def create_basic_embed(title, description=None, color="info", timestamp=True):
     embed = discord.Embed(
         title=title,
         description=description,
-        color=COLORS.get(color, COLORS["info"])
+        color=color,
+        timestamp=datetime.utcnow() if timestamp else None,
+        url=url
     )
     
-    if timestamp:
-        embed.timestamp = datetime.utcnow()
+    # Add footer if provided
+    if footer_text:
+        embed.set_footer(text=footer_text, icon_url=footer_icon)
         
+    # Add thumbnail if provided
+    if thumbnail:
+        embed.set_thumbnail(url=thumbnail)
+        
+    # Add image if provided
+    if image:
+        embed.set_image(url=image)
+        
+    # Add author if provided
+    if author_name:
+        embed.set_author(name=author_name, icon_url=author_icon, url=author_url)
+        
+    # Add fields if provided
+    if fields:
+        for field in fields:
+            embed.add_field(
+                name=field.get("name", "Field"),
+                value=field.get("value", "Value"),
+                inline=field.get("inline", False)
+            )
+            
     return embed
 
-def create_server_embed(server_data, status=None):
+def format_timestamp(dt: datetime, format_type: str = "R") -> str:
     """
-    Create an embed for server information
+    Format a datetime object as a Discord timestamp
     
     Args:
-        server_data: Server data from database
-        status: Optional server status from query
+        dt: Datetime object to format
+        format_type: Discord timestamp format type:
+            't': Short Time (e.g., 9:41 PM)
+            'T': Long Time (e.g., 9:41:30 PM)
+            'd': Short Date (e.g., 30/06/2021)
+            'D': Long Date (e.g., 30 June 2021)
+            'f': Short Date/Time (e.g., 30 June 2021 9:41 PM)
+            'F': Long Date/Time (e.g., Wednesday, 30 June 2021 9:41 PM)
+            'R': Relative Time (e.g., 2 hours ago)
+            
+    Returns:
+        str: Formatted Discord timestamp string
+    """
+    if not dt:
+        return "Unknown"
+        
+    try:
+        unix_timestamp = int(dt.timestamp())
+        return f"<t:{unix_timestamp}:{format_type}>"
+    except (AttributeError, ValueError, TypeError) as e:
+        logger.error(f"Error formatting timestamp: {e}")
+        return "Invalid date"
+        
+def server_info_embed(server_data: Dict[str, Any]) -> discord.Embed:
+    """
+    Create an embed displaying server information
+    
+    Args:
+        server_data: Dictionary with server information
         
     Returns:
-        discord.Embed: Formatted server embed
+        discord.Embed: Formatted server info embed
     """
-    server_name = server_data.get("name", "Unknown Server")
-    embed = create_basic_embed(
-        f"{EMOJIS['server']} {server_name}",
-        color="server"
+    status = server_data.get("status", "Unknown")
+    status_emoji = "🟢" if status == "online" else "🔴"
+    
+    embed = create_embed(
+        title=f"{status_emoji} {server_data.get('name', 'Unknown Server')}",
+        description=f"Server information for {server_data.get('name', 'Unknown')}",
+        color=discord.Color.green() if status == "online" else discord.Color.red()
     )
     
     # Add server details
-    host = server_data.get("host", "Unknown")
-    port = server_data.get("port", "Unknown")
     embed.add_field(
-        name="Connection Details",
-        value=f"Host: `{host}`\nPort: `{port}`",
-        inline=True
-    )
-    
-    # Add status information if available
-    if status:
-        online = status.get("online", False)
-        status_emoji = EMOJIS["online"] if online else EMOJIS["offline"]
-        status_text = "Online" if online else "Offline"
-        
-        if online:
-            # Add player count if available
-            players = status.get("players", 0)
-            max_players = status.get("maxplayers", 0)
-            embed.add_field(
-                name=f"{status_emoji} Status",
-                value=f"{status_text}\nPlayers: {players}/{max_players}",
-                inline=True
-            )
-            
-            # Add map if available
-            if "map" in status and status["map"] != "Unknown":
-                embed.add_field(
-                    name=f"{EMOJIS['location']} Map",
-                    value=status["map"],
-                    inline=True
-                )
-        else:
-            # Just show offline status with any error
-            error_msg = status.get("error", "Server not responding")
-            embed.add_field(
-                name=f"{status_emoji} Status",
-                value=f"{status_text}\n{error_msg}",
-                inline=True
-            )
-    
-    # Add footer with last query time if available
-    if status and "query_time" in status:
-        try:
-            # Format the timestamp nicely
-            query_time = datetime.fromisoformat(status["query_time"])
-            time_str = discord.utils.format_dt(query_time, style="R")
-            embed.set_footer(text=f"Last updated: {time_str}")
-        except:
-            # Fallback to raw timestamp if parsing fails
-            embed.set_footer(text=f"Last updated: {status['query_time']}")
-    
-    return embed
-
-def create_player_embed(player_data, server_name=None):
-    """
-    Create an embed for player statistics
-    
-    Args:
-        player_data: Player statistics data
-        server_name: Optional server name
-        
-    Returns:
-        discord.Embed: Formatted player statistics embed
-    """
-    player_name = player_data.get("name", "Unknown Player")
-    embed = create_basic_embed(
-        f"{EMOJIS['player']} {player_name}",
-        color="player"
-    )
-    
-    if server_name:
-        embed.description = f"Stats on server: **{server_name}**"
-    
-    # Main stats section
-    kills = player_data.get("kills", 0)
-    deaths = player_data.get("deaths", 0)
-    kd_ratio = kills / deaths if deaths > 0 else kills
-    
-    embed.add_field(
-        name=f"{EMOJIS['kill']} Kills",
-        value=f"`{kills}`",
+        name="Status",
+        value=f"{status_emoji} {status.capitalize()}",
         inline=True
     )
     
     embed.add_field(
-        name=f"{EMOJIS['death']} Deaths",
-        value=f"`{deaths}`",
+        name="Players",
+        value=f"{server_data.get('players', 0)}/{server_data.get('max_players', 0)}",
         inline=True
     )
     
     embed.add_field(
-        name="K/D Ratio",
-        value=f"`{kd_ratio:.2f}`",
+        name="Address",
+        value=f"{server_data.get('ip', 'Unknown')}:{server_data.get('port', 'Unknown')}",
         inline=True
     )
     
-    # Additional stats if available
-    if "playtime" in player_data:
-        hours = player_data["playtime"] / 60.0
+    # Add additional fields if available
+    if server_data.get("map"):
         embed.add_field(
-            name=f"{EMOJIS['clock']} Playtime",
-            value=f"`{hours:.1f}` hours",
+            name="Map",
+            value=server_data.get("map"),
             inline=True
         )
-    
-    if "last_seen" in player_data:
-        try:
-            last_seen = datetime.fromisoformat(player_data["last_seen"])
-            time_str = discord.utils.format_dt(last_seen, style="R")
-            embed.add_field(
-                name="Last Seen",
-                value=time_str,
-                inline=True
-            )
-        except:
-            embed.add_field(
-                name="Last Seen",
-                value=str(player_data["last_seen"]),
-                inline=True
-            )
-    
-    # Faction info if available
-    if "faction" in player_data and player_data["faction"]:
-        faction_name = player_data["faction"].get("name", "Unknown Faction")
-        faction_role = player_data.get("faction_role", "Member")
         
+    if server_data.get("version"):
         embed.add_field(
-            name=f"{EMOJIS['faction']} Faction",
-            value=f"{faction_name} ({faction_role})",
+            name="Version",
+            value=server_data.get("version"),
             inline=True
         )
-    
-    # Nemesis/Prey information if available
-    rivals = player_data.get("rivals", {})
-    if rivals:
-        nemesis_name = rivals.get("nemesis", {}).get("name", None)
-        nemesis_kills = rivals.get("nemesis", {}).get("kills", 0)
         
-        prey_name = rivals.get("prey", {}).get("name", None)
-        prey_kills = rivals.get("prey", {}).get("kills", 0)
-        
-        if nemesis_name:
-            embed.add_field(
-                name="Nemesis",
-                value=f"{nemesis_name} ({nemesis_kills} kills)",
-                inline=True
-            )
-            
-        if prey_name:
-            embed.add_field(
-                name="Prey",
-                value=f"{prey_name} ({prey_kills} kills)",
-                inline=True
-            )
-    
-    # Add linked accounts if any
-    linked = player_data.get("linked_accounts", [])
-    if linked:
-        linked_names = ", ".join([acc.get("name", "Unknown") for acc in linked])
+    if server_data.get("added_at"):
         embed.add_field(
-            name="Linked Accounts",
-            value=linked_names,
-            inline=False
+            name="Added",
+            value=format_timestamp(server_data.get("added_at")),
+            inline=True
         )
+        
+    # Add footer with last update time
+    embed.set_footer(text=f"Last updated: {format_timestamp(server_data.get('last_updated', datetime.utcnow()))}")
     
     return embed
+    
+def error_embed(title: str, description: str) -> discord.Embed:
+    """Alias for create_error_embed"""
+    return create_error_embed(title, description)
 
-def create_killfeed_embed(kill_data, server_name=None):
-    """
-    Create an embed for killfeed entries
-    
-    Args:
-        kill_data: Kill event data
-        server_name: Optional server name
-        
-    Returns:
-        discord.Embed: Formatted killfeed embed
-    """
-    killer_name = kill_data.get("killer", {}).get("name", "Unknown")
-    victim_name = kill_data.get("victim", {}).get("name", "Unknown")
-    
-    # Basic embed setup
-    embed = create_basic_embed(
-        f"{EMOJIS['kill']} Killfeed",
-        description=f"**{killer_name}** killed **{victim_name}**",
-        color="killfeed"
-    )
-    
-    # Add server name if provided
-    if server_name:
-        embed.description += f"\nServer: **{server_name}**"
-    
-    # Add weapon if available
-    weapon = kill_data.get("weapon", "Unknown")
-    if weapon and weapon != "Unknown":
-        embed.add_field(
-            name="Weapon",
-            value=weapon,
-            inline=True
-        )
-    
-    # Add distance if available
-    distance = kill_data.get("distance", None)
-    if distance:
-        embed.add_field(
-            name="Distance",
-            value=f"{distance}m",
-            inline=True
-        )
-    
-    # Add time if available
-    if "timestamp" in kill_data:
-        try:
-            kill_time = datetime.fromisoformat(kill_data["timestamp"])
-            time_str = discord.utils.format_dt(kill_time, style="R")
-            embed.add_field(
-                name="Time",
-                value=time_str,
-                inline=True
-            )
-        except:
-            # Fallback to raw timestamp
-            embed.add_field(
-                name="Time",
-                value=str(kill_data["timestamp"]),
-                inline=True
-            )
-    
-    # Add special flags if available (headshot, etc.)
-    flags = []
-    if kill_data.get("headshot", False):
-        flags.append("Headshot")
-    if kill_data.get("backstab", False):
-        flags.append("Backstab")
-        
-    if flags:
-        embed.add_field(
-            name="Special",
-            value=", ".join(flags),
-            inline=True
-        )
-    
-    return embed
-
-def create_mission_embed(mission_data, server_name=None):
-    """
-    Create an embed for mission information
-    
-    Args:
-        mission_data: Mission data
-        server_name: Optional server name
-        
-    Returns:
-        discord.Embed: Formatted mission embed
-    """
-    mission_type = mission_data.get("type", "Unknown Mission")
-    title = f"{EMOJIS['mission']} {mission_type}"
-    
-    # Add status to title if available
-    status = mission_data.get("status", "Active")
-    if status.lower() == "completed":
-        title += " (Completed)"
-    elif status.lower() == "failed":
-        title += " (Failed)"
-    
-    embed = create_basic_embed(
-        title,
-        color="mission"
-    )
-    
-    # Add server name if provided
-    if server_name:
-        embed.description = f"Server: **{server_name}**"
-    
-    # Add details if available
-    if "location" in mission_data:
-        embed.add_field(
-            name=f"{EMOJIS['location']} Location",
-            value=mission_data["location"],
-            inline=True
-        )
-    
-    if "difficulty" in mission_data:
-        embed.add_field(
-            name="Difficulty",
-            value=mission_data["difficulty"],
-            inline=True
-        )
-    
-    if "reward" in mission_data:
-        embed.add_field(
-            name=f"{EMOJIS['money']} Reward",
-            value=mission_data["reward"],
-            inline=True
-        )
-    
-    # Add timing information
-    if "start_time" in mission_data:
-        try:
-            start_time = datetime.fromisoformat(mission_data["start_time"])
-            time_str = discord.utils.format_dt(start_time, style="R")
-            embed.add_field(
-                name="Started",
-                value=time_str,
-                inline=True
-            )
-        except:
-            embed.add_field(
-                name="Started",
-                value=str(mission_data["start_time"]),
-                inline=True
-            )
-    
-    if status.lower() != "active" and "end_time" in mission_data:
-        try:
-            end_time = datetime.fromisoformat(mission_data["end_time"])
-            time_str = discord.utils.format_dt(end_time, style="R")
-            embed.add_field(
-                name="Ended",
-                value=time_str,
-                inline=True
-            )
-        except:
-            embed.add_field(
-                name="Ended",
-                value=str(mission_data["end_time"]),
-                inline=True
-            )
-    
-    # Add participants if available
-    if "participants" in mission_data and mission_data["participants"]:
-        participants = mission_data["participants"]
-        if isinstance(participants, list) and len(participants) > 0:
-            names = []
-            for p in participants[:5]:  # Limit to 5 names
-                if isinstance(p, dict) and "name" in p:
-                    names.append(p["name"])
-                elif isinstance(p, str):
-                    names.append(p)
-            
-            # Add ellipsis if there are more participants
-            if len(participants) > 5:
-                names.append(f"...and {len(participants) - 5} more")
-                
-            embed.add_field(
-                name="Participants",
-                value=", ".join(names),
-                inline=False
-            )
-    
-    return embed
-
-def create_faction_embed(faction_data, member_count=None):
-    """
-    Create an embed for faction information
-    
-    Args:
-        faction_data: Faction data
-        member_count: Optional member count
-        
-    Returns:
-        discord.Embed: Formatted faction embed
-    """
-    faction_name = faction_data.get("name", "Unknown Faction")
-    embed = create_basic_embed(
-        f"{EMOJIS['faction']} {faction_name}",
-        color="faction"
-    )
-    
-    # Add description if available
-    if "description" in faction_data and faction_data["description"]:
-        embed.description = faction_data["description"]
-    
-    # Add leader info if available
-    if "leader" in faction_data and faction_data["leader"]:
-        leader_name = faction_data["leader"].get("name", "Unknown")
-        embed.add_field(
-            name=f"{EMOJIS['crown']} Leader",
-            value=leader_name,
-            inline=True
-        )
-    
-    # Add member count if provided
-    if member_count is not None:
-        embed.add_field(
-            name="Members",
-            value=str(member_count),
-            inline=True
-        )
-    
-    # Add creation date if available
-    if "created_at" in faction_data:
-        try:
-            created_at = datetime.fromisoformat(faction_data["created_at"])
-            time_str = discord.utils.format_dt(created_at, style="D")
-            embed.add_field(
-                name="Created",
-                value=time_str,
-                inline=True
-            )
-        except:
-            embed.add_field(
-                name="Created",
-                value=str(faction_data["created_at"]),
-                inline=True
-            )
-    
-    # Add stats if available
-    if "stats" in faction_data:
-        stats = faction_data["stats"]
-        kills = stats.get("kills", 0)
-        deaths = stats.get("deaths", 0)
-        
-        embed.add_field(
-            name=f"{EMOJIS['kill']} Kills",
-            value=str(kills),
-            inline=True
-        )
-        
-        embed.add_field(
-            name=f"{EMOJIS['death']} Deaths",
-            value=str(deaths),
-            inline=True
-        )
-        
-        # Calculate KD ratio
-        kd_ratio = kills / deaths if deaths > 0 else kills
-        embed.add_field(
-            name="K/D Ratio",
-            value=f"{kd_ratio:.2f}",
-            inline=True
-        )
-    
-    return embed
-
-def create_connection_embed(connection_data, server_name=None):
-    """
-    Create an embed for connection information
-    
-    Args:
-        connection_data: Connection data
-        server_name: Optional server name
-        
-    Returns:
-        discord.Embed: Formatted connection embed
-    """
-    player_name = connection_data.get("player", {}).get("name", "Unknown Player")
-    action = connection_data.get("action", "Unknown").title()
-    
-    title = f"{EMOJIS['connection']} Player {action}"
-    
-    if action.lower() == "connect":
-        color = "success"
-        emoji = EMOJIS["online"]
-    else:  # disconnect
-        color = "error"
-        emoji = EMOJIS["offline"]
-    
-    embed = create_basic_embed(
-        title,
-        description=f"{emoji} **{player_name}** has {action.lower()}ed",
-        color=color
-    )
-    
-    # Add server name if provided
-    if server_name:
-        embed.description += f" to **{server_name}**"
-    
-    # Add timestamp if available
-    if "timestamp" in connection_data:
-        try:
-            conn_time = datetime.fromisoformat(connection_data["timestamp"])
-            time_str = discord.utils.format_dt(conn_time, style="R")
-            embed.add_field(
-                name="Time",
-                value=time_str,
-                inline=True
-            )
-        except:
-            embed.add_field(
-                name="Time",
-                value=str(connection_data["timestamp"]),
-                inline=True
-            )
-    
-    # Add IP info if available (truncated for privacy)
-    if "ip" in connection_data and connection_data["ip"]:
-        ip = connection_data["ip"]
-        # Only show the first two octets for privacy
-        if "." in ip:
-            parts = ip.split(".")
-            masked_ip = f"{parts[0]}.{parts[1]}.*.*"
-            embed.add_field(
-                name="IP (partial)",
-                value=masked_ip,
-                inline=True
-            )
-    
-    # Add session duration for disconnects
-    if action.lower() == "disconnect" and "duration" in connection_data:
-        minutes = connection_data["duration"]
-        hours = minutes / 60.0
-        
-        if hours >= 1:
-            duration = f"{hours:.1f} hours"
-        else:
-            duration = f"{minutes} minutes"
-            
-        embed.add_field(
-            name="Session Duration",
-            value=duration,
-            inline=True
-        )
-    
-    return embed
-
-def create_error_embed(title, description=None):
+def create_error_embed(title: str, description: str) -> discord.Embed:
     """
     Create an error embed with standardized formatting
     
     Args:
         title: Error title
-        description: Optional error description
+        description: Error description
         
     Returns:
         discord.Embed: Formatted error embed
     """
-    return create_basic_embed(
-        f"{EMOJIS['error']} {title}",
+    return create_embed(
+        title=f"❌ {title}",
         description=description,
-        color="error"
+        color=discord.Color.red()
     )
-
-def create_success_embed(title, description=None):
+    
+def success_embed(title: str, description: str) -> discord.Embed:
+    """Alias for create_success_embed"""
+    return create_success_embed(title, description)
+    
+def create_success_embed(title: str, description: str) -> discord.Embed:
     """
     Create a success embed with standardized formatting
     
     Args:
         title: Success title
-        description: Optional success description
+        description: Success description
         
     Returns:
         discord.Embed: Formatted success embed
     """
-    return create_basic_embed(
-        f"{EMOJIS['success']} {title}",
+    return create_embed(
+        title=f"✅ {title}",
         description=description,
-        color="success"
+        color=discord.Color.green()
     )
-
-def create_info_embed(title, description=None):
-    """
-    Create an info embed with standardized formatting
     
-    Args:
-        title: Info title
-        description: Optional info description
-        
-    Returns:
-        discord.Embed: Formatted info embed
-    """
-    return create_basic_embed(
-        f"{EMOJIS['info']} {title}",
-        description=description,
-        color="info"
-    )
-
-def create_warning_embed(title, description=None):
+def warning_embed(title: str, description: str) -> discord.Embed:
     """
     Create a warning embed with standardized formatting
     
     Args:
         title: Warning title
-        description: Optional warning description
+        description: Warning description
         
     Returns:
         discord.Embed: Formatted warning embed
     """
-    return create_basic_embed(
-        f"{EMOJIS['warning']} {title}",
+    return create_embed(
+        title=f"⚠️ {title}",
         description=description,
-        color="warning"
+        color=discord.Color.gold()
     )
-
-def create_leaderboard_embed(server, players, stat_type="kills", timeframe="all"):
+    
+def create_server_embed(server_data: Dict[str, Any]) -> discord.Embed:
     """
-    Create an embed showing player leaderboard statistics
+    Create an embed for server information (alias for server_info_embed)
     
     Args:
-        server: Server data dictionary
-        players: List of player data dictionaries  
-        stat_type: Type of stat to sort by (kills, deaths, kd, time)
-        timeframe: Time period for the leaderboard (all, week, day)
+        server_data: Dictionary with server information
+        
+    Returns:
+        discord.Embed: Formatted server info embed
+    """
+    return server_info_embed(server_data)
+    
+def create_info_embed(title: str, description: str) -> discord.Embed:
+    """
+    Create an information embed with standardized formatting
+    
+    Args:
+        title: Info title
+        description: Info description
+        
+    Returns:
+        discord.Embed: Formatted info embed
+    """
+    return create_embed(
+        title=f"ℹ️ {title}",
+        description=description,
+        color=discord.Color.blue()
+    )
+    
+def create_basic_embed(title: str, description: str, color: discord.Color = None) -> discord.Embed:
+    """
+    Create a basic embed with minimal styling
+    
+    Args:
+        title: Title of the embed
+        description: Description text
+        color: Color of the embed (optional)
+        
+    Returns:
+        discord.Embed: Simple formatted embed
+    """
+    if color is None:
+        color = discord.Color.blurple()
+        
+    return create_embed(
+        title=title,
+        description=description,
+        color=color
+    )
+    
+def create_player_embed(player_data: Dict[str, Any], server_name: str = None) -> discord.Embed:
+    """
+    Create an embed displaying player statistics
+    
+    Args:
+        player_data: Dictionary with player information
+        server_name: Optional server name for context
+        
+    Returns:
+        discord.Embed: Formatted player statistics embed
+    """
+    if not player_data:
+        return create_error_embed("Player Not Found", "No player data found")
+        
+    name = player_data.get("player_name", "Unknown Player")
+    player_id = player_data.get("player_id", "Unknown ID")
+    
+    embed = create_embed(
+        title=f"📊 {name}",
+        description=f"Statistics for player {name}" + (f" on {server_name}" if server_name else ""),
+        color=discord.Color.blue()
+    )
+    
+    # Core player stats
+    embed.add_field(
+        name="Kill Statistics", 
+        value=f"**Kills:** {player_data.get('total_kills', 0)}\n"
+              f"**Deaths:** {player_data.get('total_deaths', 0)}\n"
+              f"**K/D Ratio:** {round(player_data.get('total_kills', 0) / max(1, player_data.get('total_deaths', 0)), 2)}", 
+        inline=True
+    )
+    
+    # Add timestamp data
+    first_seen = player_data.get("first_seen")
+    last_seen = player_data.get("last_seen")
+    
+    if first_seen or last_seen:
+        times_str = ""
+        if first_seen:
+            times_str += f"First seen: {format_timestamp(first_seen)}\n"
+        if last_seen:
+            times_str += f"Last seen: {format_timestamp(last_seen)}"
+            
+        embed.add_field(name="Activity", value=times_str, inline=True)
+    
+    # Add faction info if available
+    faction_name = player_data.get("faction_name")
+    if faction_name:
+        embed.add_field(
+            name="Faction",
+            value=f"**{faction_name}**",
+            inline=True
+        )
+    
+    # Add prey/nemesis if available
+    nemesis_name = player_data.get("nemesis_name") 
+    prey_name = player_data.get("prey_name")
+    
+    if nemesis_name:
+        nemesis_deaths = player_data.get("nemesis_deaths", 0)
+        embed.add_field(
+            name="😈 Nemesis",
+            value=f"**{nemesis_name}** has killed you {nemesis_deaths} times",
+            inline=True
+        )
+        
+    if prey_name:
+        prey_kills = player_data.get("prey_kills", 0)
+        embed.add_field(
+            name="🎯 Prey",
+            value=f"You've killed **{prey_name}** {prey_kills} times",
+            inline=True
+        )
+    
+    # Add ID footer for reference
+    embed.set_footer(text=f"Player ID: {player_id}")
+    
+    return embed
+    
+def create_leaderboard_embed(
+    leaderboard_data: List[Dict[str, Any]], 
+    title: str = "Leaderboard",
+    description: str = "Top players by kills",
+    server_name: str = None
+) -> discord.Embed:
+    """
+    Create an embed displaying a player leaderboard
+    
+    Args:
+        leaderboard_data: List of player entries for the leaderboard
+        title: Title for the leaderboard
+        description: Description for the leaderboard
+        server_name: Optional server name for context
         
     Returns:
         discord.Embed: Formatted leaderboard embed
     """
-    # Sort players based on the selected stat
-    if stat_type == "kills":
-        sorted_players = sorted(players, key=lambda p: p.get("kills", 0), reverse=True)
-        title = "🏆 Kills Leaderboard"
-        description = f"Top killers on {server.get('name', 'Unknown Server')}"
-    elif stat_type == "deaths":
-        sorted_players = sorted(players, key=lambda p: p.get("deaths", 0), reverse=True)
-        title = "💀 Deaths Leaderboard"
-        description = f"Most deaths on {server.get('name', 'Unknown Server')}"
-    elif stat_type == "kd":
-        # Calculate K/D ratio with safe division
-        for player in players:
-            player["kd_ratio"] = player.get("kills", 0) / max(player.get("deaths", 1), 1)
-        sorted_players = sorted(players, key=lambda p: p.get("kd_ratio", 0), reverse=True)
-        title = "⚖️ K/D Ratio Leaderboard"
-        description = f"Best K/D ratios on {server.get('name', 'Unknown Server')}"
-    elif stat_type == "time":
-        sorted_players = sorted(players, key=lambda p: p.get("playtime", 0), reverse=True)
-        title = "⏱️ Playtime Leaderboard"
-        description = f"Most active players on {server.get('name', 'Unknown Server')}"
-    else:
-        sorted_players = sorted(players, key=lambda p: p.get("kills", 0), reverse=True)
-        title = "🏆 Player Leaderboard"
-        description = f"Top players on {server.get('name', 'Unknown Server')}"
-    
-    # Add timeframe to title if not "all"
-    if timeframe == "week":
-        title += " (Last 7 Days)"
-    elif timeframe == "day":
-        title += " (Last 24 Hours)"
-    
-    # Create embed
-    embed = discord.Embed(
-        title=title,
+    if not leaderboard_data:
+        return create_error_embed("Leaderboard Error", "No leaderboard data available")
+        
+    if server_name:
+        description += f" on {server_name}"
+        
+    embed = create_embed(
+        title=f"🏆 {title}",
         description=description,
-        color=COLORS.get("player")
+        color=discord.Color.gold()
     )
     
-    # Get top 10 players for the leaderboard
-    top_players = sorted_players[:10]
+    # Format the leaderboard entries
+    leaderboard_text = ""
+    for i, player in enumerate(leaderboard_data):
+        # Create medal emojis for top 3
+        if i == 0:
+            medal = "🥇"
+        elif i == 1:
+            medal = "🥈"
+        elif i == 2:
+            medal = "🥉"
+        else:
+            medal = f"`{i+1}.`"
+            
+        name = player.get("player_name", "Unknown")
+        kills = player.get("total_kills", 0)
+        deaths = player.get("total_deaths", 0)
+        kd = round(kills / max(1, deaths), 2)
+        
+        leaderboard_text += f"{medal} **{name}** - {kills} kills, {deaths} deaths (K/D: {kd})\n"
+        
+        # Add a separator line after every 5 entries for readability
+        if (i + 1) % 5 == 0 and i < len(leaderboard_data) - 1:
+            leaderboard_text += "───────────────\n"
+            
+    embed.add_field(name="Rankings", value=leaderboard_text, inline=False)
     
-    # Create leaderboard table
-    if stat_type == "kills":
-        leaderboard_text = ""
-        for i, player in enumerate(top_players, 1):
-            kills = player.get("kills", 0)
-            deaths = player.get("deaths", 0)
-            kd = kills / max(deaths, 1)
-            
-            # Add medal emoji for top 3
-            if i == 1:
-                prefix = "🥇"
-            elif i == 2:
-                prefix = "🥈"
-            elif i == 3:
-                prefix = "🥉"
-            else:
-                prefix = f"{i}."
-                
-            leaderboard_text += f"{prefix} **{player.get('name', 'Unknown')}** - {kills} kills, {kd:.2f} K/D\n"
-            
-        embed.add_field(name="Top Killers", value=leaderboard_text or "No players found", inline=False)
-        
-    elif stat_type == "deaths":
-        leaderboard_text = ""
-        for i, player in enumerate(top_players, 1):
-            deaths = player.get("deaths", 0)
-            
-            # Add medal emoji for top 3
-            if i == 1:
-                prefix = "🥇"
-            elif i == 2:
-                prefix = "🥈"
-            elif i == 3:
-                prefix = "🥉"
-            else:
-                prefix = f"{i}."
-                
-            leaderboard_text += f"{prefix} **{player.get('name', 'Unknown')}** - {deaths} deaths\n"
-            
-        embed.add_field(name="Most Deaths", value=leaderboard_text or "No players found", inline=False)
-        
-    elif stat_type == "kd":
-        leaderboard_text = ""
-        for i, player in enumerate(top_players, 1):
-            kills = player.get("kills", 0)
-            deaths = player.get("deaths", 0)
-            kd = player.get("kd_ratio", kills / max(deaths, 1))
-            
-            # Add medal emoji for top 3
-            if i == 1:
-                prefix = "🥇"
-            elif i == 2:
-                prefix = "🥈"
-            elif i == 3:
-                prefix = "🥉"
-            else:
-                prefix = f"{i}."
-                
-            leaderboard_text += f"{prefix} **{player.get('name', 'Unknown')}** - {kd:.2f} K/D ({kills} kills, {deaths} deaths)\n"
-            
-        embed.add_field(name="Best K/D Ratios", value=leaderboard_text or "No players found", inline=False)
-        
-    elif stat_type == "time":
-        leaderboard_text = ""
-        for i, player in enumerate(top_players, 1):
-            # Format playtime in hours
-            playtime_hours = player.get("playtime", 0) / 3600  # Convert seconds to hours
-            
-            # Add medal emoji for top 3
-            if i == 1:
-                prefix = "🥇"
-            elif i == 2:
-                prefix = "🥈"
-            elif i == 3:
-                prefix = "🥉"
-            else:
-                prefix = f"{i}."
-                
-            leaderboard_text += f"{prefix} **{player.get('name', 'Unknown')}** - {playtime_hours:.1f} hours\n"
-            
-        embed.add_field(name="Most Active Players", value=leaderboard_text or "No players found", inline=False)
-    
-    # Add footer with timestamp and server info
-    current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
-    embed.set_footer(text=f"Server: {server.get('name', 'Unknown')} | Data as of {current_time}")
+    # Add timestamp
+    embed.set_footer(text=f"Updated {format_timestamp(datetime.utcnow())}")
     
     return embed
 
-def create_batch_progress_embed(progress_data, server_name=None):
+def create_faction_embed(faction_data: Dict[str, Any], server_name: str = None) -> discord.Embed:
     """
-    Create an embed showing batch processing progress
+    Create an embed displaying faction information
     
     Args:
-        progress_data: Progress data dictionary
-        server_name: Optional server name
+        faction_data: Dictionary with faction information
+        server_name: Optional server name for context
         
     Returns:
-        discord.Embed: Formatted progress embed
+        discord.Embed: Formatted faction embed
     """
-    # Default title
-    title = f"{EMOJIS['stats']} Batch Processing Progress"
-    
-    # Add server name to title if provided
-    if server_name:
-        title = f"{EMOJIS['stats']} {server_name} Batch Processing"
+    if not faction_data:
+        return create_error_embed("Faction Not Found", "No faction data found")
         
-    embed = create_basic_embed(
-        title,
-        color="info"
+    faction_name = faction_data.get("name", "Unknown Faction")
+    faction_id = faction_data.get("_id", "Unknown ID")
+    faction_tag = faction_data.get("tag", "")
+    description = faction_data.get("description", "No description available.")
+    
+    # Determine color if available, otherwise use default blue
+    color_hex = faction_data.get("color", "#3498db")
+    try:
+        # Try to parse color as hex
+        color_value = int(color_hex.lstrip('#'), 16)
+        color = discord.Color(color_value)
+    except (ValueError, AttributeError):
+        # Default to blue if color is invalid
+        color = discord.Color.blue()
+    
+    embed = create_embed(
+        title=f"🏴 {faction_name}" + (f" [{faction_tag}]" if faction_tag else ""),
+        description=description + (f"\n\nServer: **{server_name}**" if server_name else ""),
+        color=color
     )
     
-    # Get progress details
-    status = progress_data.get("status", "Unknown")
-    current = progress_data.get("current", 0)
-    total = progress_data.get("total", 0)
+    # Add statistics
+    members_count = len(faction_data.get("members", []))
+    embed.add_field(
+        name="Members",
+        value=str(members_count),
+        inline=True
+    )
     
-    # Calculate percentage
-    if total > 0:
-        percentage = int((current / total) * 100)
+    # Add kills/deaths if available
+    kills = faction_data.get("total_kills", 0)
+    deaths = faction_data.get("total_deaths", 0)
+    
+    # Calculate K/D ratio if we have data
+    if kills > 0 or deaths > 0:
+        kd_ratio = round(kills / max(1, deaths), 2)
+        embed.add_field(
+            name="Statistics",
+            value=f"**Kills:** {kills}\n**Deaths:** {deaths}\n**K/D Ratio:** {kd_ratio}",
+            inline=True
+        )
+    
+    # Add leader information if available
+    leader_id = faction_data.get("leader_id")
+    leader_name = faction_data.get("leader_name", "Unknown")
+    
+    if leader_id or leader_name != "Unknown":
+        embed.add_field(
+            name="Leader",
+            value=leader_name,
+            inline=True
+        )
+        
+    # Add member list if available and not too long
+    members = faction_data.get("members", [])
+    if members and len(members) <= 15:
+        members_text = ""
+        for i, member in enumerate(members):
+            name = member.get("name", "Unknown")
+            if i < 14:
+                members_text += f"• {name}\n"
+            elif i == 14 and len(members) > 15:
+                members_text += f"• ... and {len(members) - 14} more"
+                break
+            else:
+                members_text += f"• {name}"
+                
+        if members_text:
+            embed.add_field(
+                name="Members List",
+                value=members_text,
+                inline=False
+            )
+    
+    # Add timestamps if available
+    created_at = faction_data.get("created_at")
+    if created_at:
+        embed.add_field(
+            name="Created",
+            value=format_timestamp(created_at),
+            inline=True
+        )
+    
+    # Add territory information if available
+    territories = faction_data.get("territories", [])
+    if territories:
+        territories_text = ""
+        for territory in territories[:5]:  # Limit to 5 territories to keep embed clean
+            territories_text += f"• {territory.get('name', 'Unknown')}\n"
+            
+        if len(territories) > 5:
+            territories_text += f"• ... and {len(territories) - 5} more"
+            
+        if territories_text:
+            embed.add_field(
+                name="Territories",
+                value=territories_text,
+                inline=True
+            )
+    
+    # Add faction ID as footer
+    embed.set_footer(text=f"Faction ID: {faction_id}")
+    
+    return embed
+
+def create_connection_embed(connection_data: Dict[str, Any]) -> discord.Embed:
+    """
+    Create an embed displaying connection information
+    
+    Args:
+        connection_data: Dictionary with connection information
+        
+    Returns:
+        discord.Embed: Formatted connection embed
+    """
+    if not connection_data:
+        return create_error_embed("Connection Not Found", "No connection data found")
+        
+    connection_name = connection_data.get("name", "Unknown Connection")
+    connection_id = connection_data.get("_id", "Unknown ID")
+    status = connection_data.get("status", "Unknown").lower()
+    
+    # Determine color based on connection status
+    if status == "active" or status == "connected":
+        color = discord.Color.green()
+    elif status == "disabled" or status == "disconnected":
+        color = discord.Color.red()
     else:
-        percentage = 0
+        color = discord.Color.gold()
         
-    # Create progress bar (20 characters wide)
-    bar_length = 20
-    filled_length = int(bar_length * current / total) if total > 0 else 0
-    bar = '█' * filled_length + '░' * (bar_length - filled_length)
+    # Format status with emoji
+    status_emoji = "🟢" if status == "active" or status == "connected" else "🔴"
+    status_display = f"{status_emoji} {status.capitalize()}"
     
-    # Add progress information
-    embed.description = f"Status: **{status}**\n"
-    embed.description += f"Progress: **{current}/{total}** files processed\n"
-    embed.description += f"```\n{bar} {percentage}%\n```"
+    embed = create_embed(
+        title=f"🔌 {connection_name}",
+        description=f"Connection details for {connection_name}",
+        color=color
+    )
     
-    # Add time information if available
-    if "started_at" in progress_data:
-        try:
-            start_time = datetime.fromisoformat(progress_data["started_at"])
-            time_str = discord.utils.format_dt(start_time, style="R")
-            embed.add_field(
-                name="Started",
-                value=time_str,
-                inline=True
-            )
-        except:
-            embed.add_field(
-                name="Started",
-                value=str(progress_data["started_at"]),
-                inline=True
-            )
+    # Add status field
+    embed.add_field(
+        name="Status",
+        value=status_display,
+        inline=True
+    )
     
-    # Add estimated completion time if available
-    if "eta" in progress_data:
+    # Add connection type if available
+    connection_type = connection_data.get("type")
+    if connection_type:
         embed.add_field(
-            name="ETA",
-            value=progress_data["eta"],
-            inline=True
-        )
-        
-    # Add processing rate if available
-    if "rate" in progress_data:
-        embed.add_field(
-            name="Processing Rate",
-            value=f"{progress_data['rate']:.1f} files/sec",
+            name="Type",
+            value=connection_type,
             inline=True
         )
     
-    # Add any error information
-    if "errors" in progress_data and progress_data["errors"]:
-        error_count = len(progress_data["errors"])
-        recent_errors = progress_data["errors"][-3:]  # Show only the 3 most recent errors
-        
-        error_text = f"{error_count} errors encountered:\n"
-        for err in recent_errors:
-            error_text += f"• {err}\n"
-            
-        if error_count > 3:
-            error_text += f"...and {error_count - 3} more"
+    # Add server information if available
+    server_name = connection_data.get("server_name")
+    if server_name:
+        embed.add_field(
+            name="Server",
+            value=server_name,
+            inline=True
+        )
+    
+    # Add timestamps if available
+    created_at = connection_data.get("created_at")
+    last_connected = connection_data.get("last_connected")
+    
+    if created_at or last_connected:
+        time_text = ""
+        if created_at:
+            time_text += f"Created: {format_timestamp(created_at)}\n"
+        if last_connected:
+            time_text += f"Last Connected: {format_timestamp(last_connected)}"
             
         embed.add_field(
-            name="Errors",
-            value=error_text,
+            name="Timeline",
+            value=time_text,
             inline=False
         )
     
+    # Add additional info if available
+    settings = connection_data.get("settings", {})
+    if settings:
+        settings_text = ""
+        for key, value in settings.items():
+            if key != "password" and key != "token" and key != "api_key":  # Skip sensitive info
+                settings_text += f"**{key.replace('_', ' ').title()}**: {value}\n"
+                
+        if settings_text:
+            embed.add_field(
+                name="Settings",
+                value=settings_text,
+                inline=False
+            )
+    
+    # Add connection ID as footer
+    embed.set_footer(text=f"Connection ID: {connection_id}")
+    
+    return embed
+
+def create_mission_embed(mission_data: Dict[str, Any], server_name: str = None) -> discord.Embed:
+    """
+    Create an embed displaying mission information
+    
+    Args:
+        mission_data: Dictionary with mission information
+        server_name: Optional server name for context
+        
+    Returns:
+        discord.Embed: Formatted mission embed
+    """
+    if not mission_data:
+        return create_error_embed("Mission Not Found", "No mission data found")
+        
+    mission_name = mission_data.get("name", "Unknown Mission")
+    mission_id = mission_data.get("_id", "Unknown ID")
+    description = mission_data.get("description", "No description available.")
+    status = mission_data.get("status", "Unknown")
+    
+    # Determine color based on mission status
+    if status.lower() == "active":
+        color = discord.Color.green()
+    elif status.lower() == "completed":
+        color = discord.Color.blue()
+    elif status.lower() == "failed":
+        color = discord.Color.red()
+    else:
+        color = discord.Color.gold()
+        
+    # Format status with emoji
+    status_emoji = "✅" if status.lower() == "completed" else "❌" if status.lower() == "failed" else "🔄"
+    status_display = f"{status_emoji} {status.capitalize()}"
+    
+    embed = create_embed(
+        title=f"📋 {mission_name}",
+        description=description + (f"\n\nServer: **{server_name}**" if server_name else ""),
+        color=color
+    )
+    
+    # Add status field
+    embed.add_field(
+        name="Status",
+        value=status_display,
+        inline=True
+    )
+    
+    # Add objectives if available
+    objectives = mission_data.get("objectives", [])
+    if objectives:
+        objectives_text = ""
+        for i, objective in enumerate(objectives):
+            obj_status = "✅" if objective.get("completed", False) else "⬜"
+            objectives_text += f"{obj_status} {i+1}. {objective.get('description', 'Unknown objective')}\n"
+            
+        embed.add_field(
+            name="Objectives",
+            value=objectives_text or "None",
+            inline=False
+        )
+    
+    # Add rewards if available
+    rewards = mission_data.get("rewards", [])
+    if rewards:
+        rewards_text = ""
+        for reward in rewards:
+            rewards_text += f"• {reward.get('name', 'Unknown reward')}: {reward.get('value', 'Unknown value')}\n"
+            
+        embed.add_field(
+            name="Rewards",
+            value=rewards_text or "None",
+            inline=True
+        )
+    
+    # Add time information
+    start_time = mission_data.get("start_time")
+    end_time = mission_data.get("end_time")
+    
+    if start_time or end_time:
+        time_text = ""
+        if start_time:
+            time_text += f"Started: {format_timestamp(start_time)}\n"
+        if end_time:
+            time_text += f"Ended: {format_timestamp(end_time)}"
+            
+        embed.add_field(
+            name="Timeline",
+            value=time_text or "No timeline available",
+            inline=True
+        )
+        
+    # Add mission ID as footer
+    embed.set_footer(text=f"Mission ID: {mission_id}")
+    
+    return embed
+
+def create_batch_progress_embed(memory, description=None, color=None):
+    """
+    Create an embed for batch CSV parser progress
+    
+    Args:
+        memory: Parser memory object with progress information
+        description: Optional custom description
+        color: Optional custom color (defaults based on status)
+        
+    Returns:
+        discord.Embed: Progress embed
+    """
+    if not memory:
+        return create_error_embed("Parser Status", "No progress data available")
+        
+    if not color:
+        if memory.status == "Complete":
+            color = discord.Color.green()
+        elif memory.status == "Running":
+            color = discord.Color.blue()
+        elif "Error" in memory.status:
+            color = discord.Color.red()
+        else:
+            color = discord.Color.gold()
+            
+    if not description:
+        description = f"Current status: **{memory.status}**"
+        
+    embed = create_embed(
+        title="CSV Batch Parser Progress",
+        description=description,
+        color=color
+    )
+    
+    # Add fields for progress information
+    if hasattr(memory, "percent_complete"):
+        progress_bar = ""
+        
+        # Create a simple visual progress bar
+        percent = int(memory.percent_complete)
+        complete_chars = int(percent / 10)
+        progress_bar = "█" * complete_chars + "░" * (10 - complete_chars)
+            
+        embed.add_field(
+            name="Progress",
+            value=f"{progress_bar} {percent}%",
+            inline=False
+        )
+        
+    if hasattr(memory, "processed_files") and hasattr(memory, "total_files"):
+        embed.add_field(
+            name="Files",
+            value=f"{memory.processed_files}/{memory.total_files}",
+            inline=True
+        )
+        
+    if hasattr(memory, "processed_lines") and hasattr(memory, "total_lines"):
+        embed.add_field(
+            name="Log Lines",
+            value=f"{memory.processed_lines:,}/{memory.total_lines:,}",
+            inline=True
+        )
+        
+    if hasattr(memory, "current_file") and memory.current_file:
+        embed.add_field(
+            name="Current File",
+            value=f"`{memory.current_file}`",
+            inline=True
+        )
+        
+    if hasattr(memory, "start_time") and memory.start_time:
+        elapsed = datetime.utcnow() - memory.start_time
+        elapsed_str = str(elapsed).split('.')[0]  # Remove microseconds
+        
+        embed.add_field(
+            name="Elapsed Time",
+            value=elapsed_str,
+            inline=True
+        )
+        
+    if hasattr(memory, "updated_at"):
+        embed.set_footer(text=f"Last updated: {format_timestamp(memory.updated_at)}")
+        
     return embed

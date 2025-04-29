@@ -336,6 +336,115 @@ def check_server_limit() -> Callable[[F], F]:
     
     return decorator
 
+def server_exists() -> Callable[[F], F]:
+    """
+    Decorator to check if a server exists in the database for the current guild
+    
+    Returns:
+        Decorated function that checks server existence
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        async def wrapper(self: Any, ctx: DiscordContext, *args: Any, **kwargs: Any) -> Any:
+            from database.models import Server
+            
+            if ctx.guild is None:
+                await ctx.respond("⚠️ This command can only be used in a server, not in DMs.", ephemeral=True)
+                return None
+            
+            # Check if the server ID is passed in kwargs
+            server_id = kwargs.get('server_id')
+            
+            # If server_id is provided, check if it exists
+            if server_id:
+                server = await Server.get_by_id(server_id)
+                if not server or str(server.guild_id) != str(ctx.guild.id):
+                    await ctx.respond(
+                        "⚠️ The specified server does not exist or doesn't belong to this Discord server.",
+                        ephemeral=True
+                    )
+                    return None
+            
+            # If no server_id is provided, check if there's at least one server
+            else:
+                servers = await Server.get_servers_for_guild(ctx.guild.id)
+                if not servers:
+                    await ctx.respond(
+                        "⚠️ No game servers are configured for this Discord server.\n"
+                        "Please use `/server add` to add a game server first.",
+                        ephemeral=True
+                    )
+                    return None
+            
+            return await func(self, ctx, *args, **kwargs)
+        
+        return cast(F, wrapper)
+    
+    return decorator
+
+def premium_server(tier: int = 1) -> Callable[[F], F]:
+    """
+    Decorator to check if a server meets premium tier requirements
+    
+    This is different from premium_tier_required as it checks the specific
+    server being referenced in the command rather than the guild overall.
+    
+    Args:
+        tier: Minimum premium tier required (0 = survivor, 1 = warlord, 2 = overseer)
+        
+    Returns:
+        Decorated function that checks server premium tier
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        async def wrapper(self: Any, ctx: DiscordContext, *args: Any, **kwargs: Any) -> Any:
+            from database.models import Server
+            from database.connection import Database
+            
+            if ctx.guild is None:
+                await ctx.respond("⚠️ This command can only be used in a server, not in DMs.", ephemeral=True)
+                return None
+            
+            # Check if the server ID is passed in kwargs
+            server_id = kwargs.get('server_id')
+            
+            # Get the guild's premium tier
+            db = await Database.get_instance()
+            if not db:
+                logger.error("Failed to get database instance in premium_server")
+                await ctx.respond("⚠️ Could not verify premium status. Please try again later.", ephemeral=True)
+                return None
+                
+            numeric_guild_tier = await get_guild_numeric_tier(db, ctx.guild.id)
+            
+            # If premium tier is insufficient, error
+            if numeric_guild_tier < tier:
+                required_tier_name = TIER_DISPLAY_NAMES.get(tier, f"Tier {tier}")
+                current_tier_name = TIER_DISPLAY_NAMES.get(numeric_guild_tier, f"Tier {numeric_guild_tier}")
+                
+                await ctx.respond(
+                    f"⚠️ This command requires **{required_tier_name}** tier, but this server is on **{current_tier_name}** tier.\n"
+                    f"Please upgrade to access this feature.",
+                    ephemeral=True
+                )
+                return None
+            
+            # If server_id is provided, check if it exists
+            if server_id:
+                server = await Server.get_by_id(server_id)
+                if not server or str(server.guild_id) != str(ctx.guild.id):
+                    await ctx.respond(
+                        "⚠️ The specified server does not exist or doesn't belong to this Discord server.",
+                        ephemeral=True
+                    )
+                    return None
+            
+            return await func(self, ctx, *args, **kwargs)
+        
+        return cast(F, wrapper)
+    
+    return decorator
+
 def rate_limit(limit: int = 1, per: float = 5.0) -> Callable[[F], F]:
     """
     Decorator to apply rate limiting to a command

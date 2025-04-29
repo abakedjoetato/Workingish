@@ -217,7 +217,9 @@ class CSVParser:
             if not killer:
                 killer = await Player.create(db,
                     player_id=killer_id,
-                    player_name=killer_name
+                    player_name=killer_name,
+                    first_seen=datetime.utcnow(),
+                    last_seen=datetime.utcnow()
                 )
             else:
                 # Update name if it has changed
@@ -227,6 +229,9 @@ class CSVParser:
                 # Increment kills (only if not a suicide)
                 if not is_suicide:
                     killer.total_kills += 1
+                
+                # Update last seen timestamp
+                killer.last_seen = datetime.utcnow()
                 
                 await killer.update(db)
             
@@ -241,7 +246,9 @@ class CSVParser:
                 victim = await Player.create(db,
                     player_id=victim_id,
                     player_name=victim_name,
-                    total_deaths=1
+                    total_deaths=1,
+                    first_seen=datetime.utcnow(),
+                    last_seen=datetime.utcnow()
                 )
             else:
                 # Update name if it has changed
@@ -250,6 +257,9 @@ class CSVParser:
                 
                 # Increment deaths
                 victim.total_deaths += 1
+                
+                # Update last seen timestamp
+                victim.last_seen = datetime.utcnow()
                 
                 await victim.update(db)
             

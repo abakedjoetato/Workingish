@@ -401,6 +401,136 @@ class ConnectionEvent:
         return result
 
 
+class Mission:
+    """Model for game server missions"""
+    collection_name = "missions"
+    
+    def __init__(self, server_id, mission_name, start_time, end_time=None, 
+                 is_active=True, mission_type=None, location=None, _id=None):
+        """
+        Initialize a mission record
+        
+        Args:
+            server_id: MongoDB ObjectId of the server
+            mission_name: Name of the mission
+            start_time: When the mission started
+            end_time: When the mission ended (None if still active)
+            is_active: Whether the mission is currently active
+            mission_type: Type of mission (normal, special, etc.)
+            location: Mission location coordinates (if available)
+            _id: MongoDB ObjectId
+        """
+        self.server_id = server_id
+        self.mission_name = mission_name
+        self.start_time = start_time
+        self.end_time = end_time
+        self.is_active = is_active
+        self.mission_type = mission_type
+        self.location = location
+        self._id = _id
+    
+    @classmethod
+    async def create(cls, db, **kwargs):
+        """Create a new mission record in the database"""
+        mission = cls(**kwargs)
+        collection = await db.get_collection(cls.collection_name)
+        result = await collection.insert_one(mission.to_dict())
+        mission._id = result.inserted_id
+        return mission
+    
+    @classmethod
+    async def get_by_id(cls, db, mission_id):
+        """Get a mission by ID"""
+        collection = await db.get_collection(cls.collection_name)
+        data = await collection.find_one({"_id": mission_id})
+        
+        if data:
+            id_value = data.get("_id")
+            if id_value:
+                return cls(**{**data, "_id": id_value})
+        return None
+        
+    @classmethod
+    async def get_active_by_name(cls, db, server_id, mission_name):
+        """Get active mission by name for a server"""
+        collection = await db.get_collection(cls.collection_name)
+        data = await collection.find_one({
+            "server_id": server_id,
+            "mission_name": mission_name,
+            "is_active": True
+        })
+        
+        if data:
+            id_value = data.get("_id")
+            if id_value:
+                return cls(**{**data, "_id": id_value})
+        return None
+    
+    @classmethod
+    async def get_active_missions(cls, db, server_id):
+        """Get all active missions for a server"""
+        collection = await db.get_collection(cls.collection_name)
+        cursor = collection.find({
+            "server_id": server_id,
+            "is_active": True
+        })
+        
+        missions = []
+        async for data in cursor:
+            id_value = data.get("_id")
+            if id_value:
+                missions.append(cls(**{**data, "_id": id_value}))
+        
+        return missions
+        
+    @classmethod
+    async def get_recent_missions(cls, db, server_id, limit=10):
+        """Get recent missions for a server, sorted by start time"""
+        collection = await db.get_collection(cls.collection_name)
+        cursor = collection.find({"server_id": server_id})
+        cursor.sort("start_time", -1)  # Most recent first
+        cursor.limit(limit)
+        
+        missions = []
+        async for data in cursor:
+            id_value = data.get("_id")
+            if id_value:
+                missions.append(cls(**{**data, "_id": id_value}))
+        
+        return missions
+        
+    async def update(self, db):
+        """Update mission in the database"""
+        data = self.to_dict()
+        collection = await db.get_collection(self.collection_name)
+        await collection.update_one(
+            {"_id": self._id},
+            {"$set": data}
+        )
+    
+    async def complete(self, db, end_time=None):
+        """Mark mission as completed"""
+        self.is_active = False
+        self.end_time = end_time or datetime.utcnow()
+        await self.update(db)
+        
+    def to_dict(self):
+        """Convert instance to dictionary for database storage"""
+        result = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        return result
+    
+    def get_duration(self):
+        """Calculate mission duration in minutes"""
+        if not self.end_time:
+            # Mission still active, use current time
+            duration = (datetime.utcnow() - self.start_time).total_seconds() / 60
+        else:
+            # Completed mission
+            duration = (self.end_time - self.start_time).total_seconds() / 60
+        
+        return round(duration, 1)  # Round to 1 decimal place
+
+
 class ParserState:
     """Model for tracking parser state"""
     collection_name = "parser_state"

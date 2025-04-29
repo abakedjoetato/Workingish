@@ -1,334 +1,358 @@
 """
 LSP Error Suppressors
 
-This module provides utility functions and type hints to suppress Language Server Protocol (LSP) errors.
-These fixes improve code quality and prevent false positives in LSP error detection.
+This module contains type stubs and suppression utilities to fix Language Server Protocol (LSP)
+errors without changing the actual functionality of the code.
 
-This module should be imported in files that use external libraries to provide proper type hints
-for LSP without causing runtime import errors.
+These suppressors help IDE integration by providing type hints to the language server
+while maintaining compatibility with the actual code execution.
 """
 
-import logging
-import typing
-import os
-import sys
-from typing import Any, Dict, List, Tuple, Union, Optional, Callable, TypeVar, Generic, Iterable, Iterator, Awaitable, Coroutine, Generator, AsyncGenerator, Mapping, Sequence, Set, FrozenSet, Type, cast, overload, Protocol, runtime_checkable
+from typing import Any, Dict, List, Optional, Union, TypeVar, Generic, Protocol, Callable, Type
+import datetime
 
-# Set up logging
-logger = logging.getLogger('deadside_bot.utils.lsp_error_suppressors')
+# ======================================================================
+# Discord Type Suppressors
+# ======================================================================
 
-# Type variables for generic types
-T = TypeVar('T')
-K = TypeVar('K')
-V = TypeVar('V')
-F = TypeVar('F', bound=Callable[..., Any])
-T_co = TypeVar('T_co', covariant=True)
-T_contra = TypeVar('T_contra', contravariant=True)
+class DiscordContext:
+    """Type stub for discord.ApplicationContext to suppress LSP errors"""
+    author: Any
+    guild: Any
+    channel: Any
+    
+    async def defer(self, *args, **kwargs):
+        pass
+        
+    async def respond(self, *args, **kwargs):
+        pass
+        
+    async def send(self, *args, **kwargs):
+        pass
 
-# Mock type aliases for libraries that may not be installed
-# This helps LSP understand the types without actually importing the modules
-if typing.TYPE_CHECKING:
-    import discord
-    import discord.ext.commands
-    from discord.ext import tasks
-    import motor.motor_asyncio
-    import bson
-    import bson.objectid
-    import pymongo
-    import pymongo.errors
-    from pymongo import ReturnDocument
+class DiscordMember:
+    """Type stub for discord.Member to suppress LSP errors"""
+    id: int
+    name: str
+    display_name: str
+    guild: Any
     
-    # Define commonly used types from discord
-    # Application contexts and commands (py-cord specific)
-    DiscordContext = discord.ApplicationContext
-    DiscordCommand = discord.ApplicationCommand
-    SlashCommandGroup = discord.SlashCommandGroup
-    SlashCommand = discord.SlashCommand
-    Option = discord.Option
-    OptionChoice = discord.OptionChoice
-    Bot = discord.Bot
-    AutocompleteContext = discord.AutocompleteContext
-    
-    # Discord entity types
-    DiscordMember = discord.Member
-    DiscordUser = discord.User
-    DiscordGuild = discord.Guild
-    DiscordRole = discord.Role
-    DiscordMessage = discord.Message
-    DiscordChannel = discord.abc.GuildChannel
-    DiscordTextChannel = discord.TextChannel
-    DiscordEmbed = discord.Embed
-    DiscordEmbedField = discord.EmbedField
-    DiscordPermissions = discord.Permissions
-    DiscordColour = discord.Colour
-    DiscordCog = discord.ext.commands.Cog
-    
-    # Tasks and background operations
-    DiscordTask = tasks.Loop
-    
-    # Motor MongoDB types
-    AsyncIOMotorClient = motor.motor_asyncio.AsyncIOMotorClient
-    AsyncIOMotorDatabase = motor.motor_asyncio.AsyncIOMotorDatabase
-    AsyncIOMotorCollection = motor.motor_asyncio.AsyncIOMotorCollection
-    AsyncIOMotorCursor = motor.motor_asyncio.AsyncIOMotorCursor
-    AsyncIOMotorClientSession = motor.motor_asyncio.AsyncIOMotorClientSession
-    
-    # MongoDB types
-    MongoDBDocument = Dict[str, Any]
-    MongoDBCursor = AsyncIOMotorCursor
-    
-    # BSON types
-    ObjectId = bson.objectid.ObjectId
-    BSONDocument = bson.SON
-    
-    # PyMongo errors
-    DuplicateKeyError = pymongo.errors.DuplicateKeyError
-    PyMongoError = pymongo.errors.PyMongoError
-    ConnectionFailure = pymongo.errors.ConnectionFailure
-    
-    # MongoDB return options
-    ReturnDocumentAfter = ReturnDocument.AFTER
-    ReturnDocumentBefore = ReturnDocument.BEFORE
-else:
-    # For runtime, use Any to avoid import errors
-    # Basic Discord types
-    DiscordContext = Any
-    DiscordCommand = Any
-    SlashCommandGroup = Any
-    SlashCommand = Any
-    Option = Any
-    OptionChoice = Any
-    Bot = Any
-    AutocompleteContext = Any
-    
-    # Discord entity types
-    DiscordMember = Any
-    DiscordUser = Any
-    DiscordGuild = Any
-    DiscordRole = Any
-    DiscordMessage = Any
-    DiscordChannel = Any
-    DiscordTextChannel = Any
-    DiscordEmbed = Any
-    DiscordEmbedField = Any
-    DiscordPermissions = Any
-    DiscordColour = Any
-    DiscordCog = Any
-    
-    # Tasks
-    DiscordTask = Any
-    
-    # MongoDB types
-    AsyncIOMotorClient = Any
-    AsyncIOMotorDatabase = Any
-    AsyncIOMotorCollection = Any
-    AsyncIOMotorCursor = Any
-    AsyncIOMotorClientSession = Any
-    MongoDBDocument = Dict[str, Any]
-    MongoDBCursor = Any
-    
-    # BSON types
-    ObjectId = Any
-    BSONDocument = Any
-    
-    # PyMongo errors
-    DuplicateKeyError = Exception
-    PyMongoError = Exception
-    ConnectionFailure = Exception
-    
-    # MongoDB return options
-    ReturnDocumentAfter = 1  # Same as pymongo.ReturnDocument.AFTER
-    ReturnDocumentBefore = 0  # Same as pymongo.ReturnDocument.BEFORE
-    
-    logger.debug("Runtime imports avoided for LSP error suppression")
+    def __init__(self, *args, **kwargs):
+        pass
 
-class EnumWrapper:
-    """Wrapper for enum values in Discord API to prevent LSP errors"""
-    def __init__(self, value: int):
-        self.value = value
+class DiscordGuild:
+    """Type stub for discord.Guild to suppress LSP errors"""
+    id: int
+    name: str
+    owner_id: int
     
-    def __int__(self) -> int:
-        return self.value
-    
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, int):
-            return self.value == other
-        if hasattr(other, 'value'):
-            return self.value == other.value
-        return False
-    
-    def __repr__(self) -> str:
-        return f"EnumWrapper({self.value})"
+    def __init__(self, *args, **kwargs):
+        pass
 
-def fix_discord_option_type_hints(option_type: Any) -> Any:
-    """
-    Helper function to fix type hints for Discord Option types
+class DiscordChannel:
+    """Type stub for discord.Channel to suppress LSP errors"""
+    id: int
+    name: str
     
-    Args:
-        option_type: The option type
-        
-    Returns:
-        The option type (unchanged)
-    """
-    return option_type
+    async def send(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def edit(self, *args, **kwargs) -> Any:
+        pass
 
-def mock_discord_type(name: str) -> Any:
-    """
-    Create a mock Discord type to prevent LSP errors
-    
-    Args:
-        name: Name of the type
-        
-    Returns:
-        Mock type class
-    """
-    class MockType:
-        def __init__(self, *args, **kwargs):
-            self.args = args
-            self.kwargs = kwargs
-            
-        def __repr__(self):
-            return f"Mock{name}"
-        
-    return MockType
+class DiscordTextChannel(DiscordChannel):
+    """Type stub for discord.TextChannel to suppress LSP errors"""
+    pass
 
-# Create mock Discord types
-Member = mock_discord_type("Member")
-TextChannel = mock_discord_type("TextChannel")
-Role = mock_discord_type("Role")
-Permissions = mock_discord_type("Permissions")
+class DiscordVoiceChannel(DiscordChannel):
+    """Type stub for discord.VoiceChannel to suppress LSP errors"""
+    pass
 
-def safe_get_attribute(obj: Any, attr_name: str, default: Any = None) -> Any:
-    """
-    Safely get an attribute from an object
-    
-    Args:
-        obj: Object to get attribute from
-        attr_name: Name of the attribute
-        default: Default value if attribute doesn't exist
-        
-    Returns:
-        Attribute value or default
-    """
-    try:
-        return getattr(obj, attr_name, default)
-    except Exception:
-        return default
+class DiscordCategoryChannel(DiscordChannel):
+    """Type stub for discord.CategoryChannel to suppress LSP errors"""
+    pass
 
-def ensure_string(value: Any) -> str:
-    """
-    Ensure a value is a string
+class DiscordMessage:
+    """Type stub for discord.Message to suppress LSP errors"""
+    id: int
+    content: str
+    author: Any
+    channel: Any
+    guild: Any
     
-    Args:
-        value: Value to convert
-        
-    Returns:
-        String representation of the value
-    """
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    try:
-        return str(value)
-    except Exception:
-        return ""
+    async def edit(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def delete(self, *args, **kwargs) -> Any:
+        pass
 
-def get_discord_import_status() -> Dict[str, bool]:
-    """
-    Get status of Discord library imports
+class DiscordEmbed:
+    """Type stub for discord.Embed to suppress LSP errors"""
+    title: str
+    description: str
     
-    Returns a dictionary with status of various Discord-related imports
-    to help with debugging LSP issues.
+    def __init__(self, *args, **kwargs):
+        pass
     
-    Returns:
-        dict: Import status for various Discord modules
-    """
-    status = {}
+    def add_field(self, *args, **kwargs) -> Any:
+        pass
     
-    try:
-        import discord
-        status["discord"] = True
-    except ImportError:
-        status["discord"] = False
-        
-    try:
-        import discord.ext.commands
-        status["discord.ext.commands"] = True
-    except ImportError:
-        status["discord.ext.commands"] = False
-        
-    try:
-        from discord.ext import tasks
-        status["discord.ext.tasks"] = True
-    except ImportError:
-        status["discord.ext.tasks"] = False
-        
-    return status
+    def set_footer(self, *args, **kwargs) -> Any:
+        pass
+    
+    def set_thumbnail(self, *args, **kwargs) -> Any:
+        pass
+    
+    def set_image(self, *args, **kwargs) -> Any:
+        pass
 
-def get_mongo_import_status() -> Dict[str, bool]:
-    """
-    Get status of MongoDB library imports
+class DiscordColor:
+    """Type stub for discord.Color to suppress LSP errors"""
+    @staticmethod
+    def red() -> Any:
+        pass
     
-    Returns a dictionary with status of various MongoDB-related imports
-    to help with debugging LSP issues.
+    @staticmethod
+    def green() -> Any:
+        pass
     
-    Returns:
-        dict: Import status for various MongoDB modules
-    """
-    status = {}
+    @staticmethod
+    def blue() -> Any:
+        pass
     
-    try:
-        import motor.motor_asyncio
-        status["motor.motor_asyncio"] = True
-    except ImportError:
-        status["motor.motor_asyncio"] = False
-        
-    try:
-        import pymongo
-        status["pymongo"] = True
-    except ImportError:
-        status["pymongo"] = False
-        
-    try:
-        import bson
-        status["bson"] = True
-    except ImportError:
-        status["bson"] = False
-        
-    try:
-        import bson.objectid
-        status["bson.objectid"] = True
-    except ImportError:
-        status["bson.objectid"] = False
-        
-    return status
+    @staticmethod
+    def gold() -> Any:
+        pass
+    
+    @staticmethod
+    def orange() -> Any:
+        pass
+    
+    @staticmethod
+    def purple() -> Any:
+        pass
 
-def fix_path_imports() -> Dict[str, bool]:
-    """
-    Fix import paths for modules in this project
+class DiscordOption:
+    """Type stub for discord.Option to suppress LSP errors"""
+    def __init__(self, *args, **kwargs):
+        pass
+
+class DiscordTask:
+    """Type stub for discord.ext.tasks.loop to suppress LSP errors"""
+    is_running: bool
     
-    This function helps ensure imports work correctly regardless of 
-    the current working directory. It's particularly useful when
-    running tests or scripts from different directories.
+    def __init__(self, *args, **kwargs):
+        pass
     
-    Returns:
-        dict: Status of path modifications
-    """
-    result = {"success": False, "modified": False}
+    def start(self, *args, **kwargs) -> None:
+        pass
     
-    try:
-        # Get absolute path to the project root
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        
-        # Add project root to path if not already there
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
-            result["modified"] = True
-            
-        result["success"] = True
-    except Exception as e:
-        logger.error(f"Error fixing import paths: {e}")
-        
-    return result
+    def stop(self, *args, **kwargs) -> None:
+        pass
+    
+    def cancel(self, *args, **kwargs) -> None:
+        pass
+    
+    def before_loop(self, func: Callable) -> Callable:
+        return func
+    
+    def after_loop(self, func: Callable) -> Callable:
+        return func
+    
+    def error(self, func: Callable) -> Callable:
+        return func
+
+# ======================================================================
+# MongoDB Type Suppressors
+# ======================================================================
+
+class MongoCollection:
+    """Type stub for motor.motor_asyncio.AsyncIOMotorCollection to suppress LSP errors"""
+    
+    async def find_one(self, *args, **kwargs) -> Optional[Dict[str, Any]]:
+        pass
+    
+    async def find(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def insert_one(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def insert_many(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def update_one(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def update_many(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def delete_one(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def delete_many(self, *args, **kwargs) -> Any:
+        pass
+    
+    async def count_documents(self, *args, **kwargs) -> int:
+        pass
+    
+    async def distinct(self, *args, **kwargs) -> List[Any]:
+        pass
+    
+    async def aggregate(self, *args, **kwargs) -> Any:
+        pass
+
+class MongoCursor:
+    """Type stub for motor.motor_asyncio.AsyncIOMotorCursor to suppress LSP errors"""
+    
+    def __aiter__(self) -> 'MongoCursor':
+        return self
+    
+    async def __anext__(self) -> Dict[str, Any]:
+        pass
+    
+    def sort(self, *args, **kwargs) -> 'MongoCursor':
+        return self
+    
+    def skip(self, n: int) -> 'MongoCursor':
+        return self
+    
+    def limit(self, n: int) -> 'MongoCursor':
+        return self
+    
+    async def to_list(self, *args, **kwargs) -> List[Dict[str, Any]]:
+        pass
+    
+    async def count(self) -> int:
+        pass
+    
+    async def distinct(self, *args, **kwargs) -> List[Any]:
+        pass
+
+class MongoDatabase:
+    """Type stub for motor.motor_asyncio.AsyncIOMotorDatabase to suppress LSP errors"""
+    
+    async def get_collection(self, name: str) -> MongoCollection:
+        pass
+    
+    async def list_collection_names(self) -> List[str]:
+        pass
+
+class MongoClient:
+    """Type stub for motor.motor_asyncio.AsyncIOMotorClient to suppress LSP errors"""
+    
+    def __init__(self, *args, **kwargs):
+        pass
+    
+    def __getitem__(self, name: str) -> MongoDatabase:
+        pass
+    
+    def get_database(self, name: str) -> MongoDatabase:
+        pass
+    
+    async def list_database_names(self) -> List[str]:
+        pass
+
+# ======================================================================
+# Type Helpers for Model Classes
+# ======================================================================
+
+class MongoModel:
+    """Helper for MongoDB model classes to suppress LSP errors"""
+    _id: Any
+    
+    def to_dict(self) -> Dict[str, Any]:
+        pass
+    
+    async def update(self, db: Any) -> None:
+        pass
+    
+    @classmethod
+    async def create(cls, db: Any, **kwargs) -> Any:
+        pass
+    
+    @classmethod
+    async def get_by_id(cls, db: Any, id: Any) -> Optional[Any]:
+        pass
+
+class PlayerModel(MongoModel):
+    """Helper for Player model to suppress LSP errors"""
+    player_id: str
+    player_name: str
+    discord_id: Optional[str]
+    total_kills: int
+    total_deaths: int
+    first_seen: datetime.datetime
+    last_seen: datetime.datetime
+    faction_id: Optional[str]
+    prey_id: Optional[str]
+    prey_name: Optional[str]
+    prey_kills: int
+    nemesis_id: Optional[str]
+    nemesis_name: Optional[str]
+    nemesis_deaths: int
+    
+    async def update_rivalry_data(self, db: Any, kill_event: Any = None, death_event: Any = None) -> None:
+        pass
+
+class KillModel(MongoModel):
+    """Helper for Kill model to suppress LSP errors"""
+    timestamp: datetime.datetime
+    killer_id: str
+    killer_name: str
+    victim_id: str
+    victim_name: str
+    weapon: str
+    distance: float
+    server_id: str
+    is_suicide: bool
+    is_menu_suicide: bool
+    is_fall_death: bool
+    from_batch_process: bool
+
+class ServerModel(MongoModel):
+    """Helper for Server model to suppress LSP errors"""
+    name: str
+    ip: str
+    port: int
+    log_path: str
+    guild_id: str
+    server_id: Optional[str]
+    access_method: str
+    ssh_user: Optional[str]
+    ssh_password: Optional[str]
+    ssh_key_path: Optional[str]
+    csv_enabled: bool
+    log_enabled: bool
+    added_at: datetime.datetime
+    updated_at: datetime.datetime
+
+class ParserStateModel(MongoModel):
+    """Helper for ParserState model to suppress LSP errors"""
+    server_id: str
+    parser_type: str
+    last_position: int
+    is_historical: bool
+    last_filename: Optional[str]
+    auto_parsing_enabled: bool
+    updated_at: datetime.datetime
+
+class ParserMemoryModel(MongoModel):
+    """Helper for ParserMemory model to suppress LSP errors"""
+    server_id: str
+    parser_type: str
+    status: str
+    total_files: int
+    processed_files: int
+    total_lines: int
+    processed_lines: int
+    current_file: str
+    percent_complete: int
+    is_running: bool
+    start_time: Optional[datetime.datetime]
+    updated_at: datetime.datetime
+    progress: int
+    last_update_timestamp: datetime.datetime
+    
+    async def save(self, db: Any) -> None:
+        pass

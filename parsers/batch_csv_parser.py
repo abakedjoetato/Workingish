@@ -433,24 +433,52 @@ class BatchCSVParser:
             victim_id: SteamID of the victim
             victim_name: Name of the victim
         """
+        # Skip processing if this is self-inflicted (suicide)
+        is_suicide = killer_id == victim_id
+        
+        # Get or create the kill object for rivalry tracking (using Kill object in memory only, not persisting)
+        kill_event = None
+        if not is_suicide:
+            # We'll use this kill event object to update rivalry data
+            kill_event = Kill(
+                timestamp=datetime.utcnow(),  # This is just for the object, not for storage
+                killer_id=killer_id,
+                killer_name=killer_name,
+                victim_id=victim_id, 
+                victim_name=victim_name,
+                weapon="",  # Not needed for rivalry tracking
+                distance=0, # Not needed for rivalry tracking
+                server_id=self.server_id,
+                is_suicide=is_suicide
+            )
+            
         # Process killer stats
         killer = await Player.get_by_player_id(db, killer_id)
         if killer:
-            killer.total_kills += 1
+            # Only increment kills if not a suicide
+            if not is_suicide:
+                killer.total_kills += 1
+                
+            # Always update timestamps and names
             killer.last_seen = datetime.utcnow()
             if killer.player_name != killer_name:
                 killer.player_name = killer_name  # Update name if changed
+                
             await killer.update(db)
         else:
             # Create new player record
-            await Player.create(
+            killer = await Player.create(
                 db,
                 player_id=killer_id,
                 player_name=killer_name,
-                total_kills=1,
+                total_kills=(0 if is_suicide else 1),
                 first_seen=datetime.utcnow(),
                 last_seen=datetime.utcnow()
             )
+            
+        # Update rivalry tracking for killer (when they kill someone)
+        if kill_event and not is_suicide:
+            await killer.update_rivalry_data(db, kill_event=kill_event)
         
         # Process victim stats (only if different from killer)
         if killer_id != victim_id:
@@ -463,7 +491,7 @@ class BatchCSVParser:
                 await victim.update(db)
             else:
                 # Create new player record
-                await Player.create(
+                victim = await Player.create(
                     db,
                     player_id=victim_id,
                     player_name=victim_name,
@@ -471,3 +499,7 @@ class BatchCSVParser:
                     first_seen=datetime.utcnow(),
                     last_seen=datetime.utcnow()
                 )
+                
+            # Update rivalry tracking for victim (when they are killed)
+            if kill_event:
+                await victim.update_rivalry_data(db, death_event=kill_event)
