@@ -12,7 +12,8 @@ logger = logging.getLogger('deadside_bot.cogs.connection')
 connection_group = discord.SlashCommandGroup(
     name="connections",
     description="Commands for managing connection notifications",
-    default_member_permissions=discord.Permissions(manage_channels=True)
+    default_member_permissions=discord.Permissions(manage_channels=True),
+    guild_only=True  # Using guild_only=True for maximum compatibility
 )
 
 class ConnectionCommands(commands.Cog):

@@ -31,7 +31,7 @@ class AnalyticsCog(commands.Cog):
         "analytics", 
         "Advanced statistics and analytics commands",
         default_member_permissions=None,
-        guild_only=True
+        guild_only=True  # Using guild_only=True for maximum compatibility
     )
     
     @analytics.command(name="server", description="Get detailed server analytics and statistics")

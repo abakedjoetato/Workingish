@@ -15,7 +15,8 @@ logger = logging.getLogger('deadside_bot.factions')
 faction_group = discord.SlashCommandGroup(
     name="faction",
     description="Commands for managing player factions",
-    default_member_permissions=discord.Permissions(manage_roles=True)
+    default_member_permissions=discord.Permissions(manage_roles=True),
+    guild_only=True  # Using guild_only=True for maximum compatibility
 )
 
 class FactionCommands(commands.Cog):

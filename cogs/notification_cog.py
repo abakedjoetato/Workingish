@@ -496,7 +496,8 @@ class NotificationCog(commands.Cog):
     # Define the slash command group
     notifications_group = discord.SlashCommandGroup(
         name="notifications",
-        description="Configure notification settings for this server"
+        description="Configure notification settings for this server",
+        guild_only=True  # Using guild_only=True for maximum compatibility
     )
     
     @notifications_group.command(
