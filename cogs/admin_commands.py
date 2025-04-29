@@ -30,7 +30,7 @@ class AdminCommands(commands.Cog):
     
     @admin_group.command(
         name="sync",
-        description="Force sync commands with Discord (Admin only)",
+        description="Force sync commands with Discord (Admin only, contexts=[discord.InteractionContextType.guild],)",
         contexts=[discord.InteractionContextType.guild],
         integration_types=[discord.IntegrationType.guild_install],
     )

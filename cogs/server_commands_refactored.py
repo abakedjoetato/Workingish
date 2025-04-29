@@ -39,7 +39,7 @@ class ServerCommands(commands.Cog):
             self.db = self.bot.db
             logger.debug("Set database for ServerCommands cog from bot")
     
-    @server_group.command(name="list", contexts=[discord.InteractionContextType.guild],)
+    @server_group.command(name="list", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@server_group.command(name="list", contexts=[discord.InteractionContextType.guild],)
     async def list_servers(self, ctx):
         """List all servers configured for this Discord server"""
         try:
@@ -75,7 +75,7 @@ class ServerCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error listing servers: {e}")
-            logger.error(traceback.format_exc())
+       @server_group.command(name="add", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@server_group.command(name="add", contexts=[discord.InteractionContextType.guild],)t_exc())
             await ctx.respond("⚠️ An error occurred while listing servers", ephemeral=True)
     
     @server_group.command(name="add")
@@ -125,8 +125,7 @@ class ServerCommands(commands.Cog):
             else:
                 embed = create_success_embed(
                     f"Server '{name}' added successfully!",
-                    f"Use `/server info {name}` to view details"
-                )
+                    f"Use `/server inf@server_group.command(name="info", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@server_group.command(name="info", contexts=[discord.InteractionContextType.guild],)         )
                 await ctx.respond(embed=embed)
                 
         except Exception as e:
@@ -170,7 +169,7 @@ class ServerCommands(commands.Cog):
                 if csv_memory and csv_memory.is_running:
                     embed.add_field(
                         name="Parser Status",
-                        value=f"Batch CSV Parser: {csv_memory.status}\nProgress: {csv_memory.progress}%",
+                        value=f"Batch CSV Par@server_group.command(name="remove", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@server_group.command(name="remove", contexts=[discord.InteractionContextType.guild],){csv_memory.progress}%",
                         inline=False
                     )
             except Exception as e:
@@ -210,8 +209,7 @@ class ServerCommands(commands.Cog):
                 embed = create_warning_embed(
                     "Confirmation Required",
                     f"Are you sure you want to remove server '{name}'? This will delete **all** related data, "
-                    f"including player stats, killfeed, etc. If you're sure, use:\n\n"
-                    f"`/server remove {name} confirm:True`"
+                    f"including player stats, killfeed, @server_group.command(name="update", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@server_group.command(name="update", contexts=[discord.InteractionContextType.guild],)               f"`/server remove {name} confirm:True`"
                 )
                 return await ctx.respond(embed=embed)
                 
@@ -265,8 +263,7 @@ class ServerCommands(commands.Cog):
             if port is not None:
                 updates["port"] = port
             if log_path is not None:
-                updates["log_path"] = log_path
-            if access_method is not None:
+                updates["log_path"] = log_p@server_group.command(name="credentials", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@server_group.command(name="credentials", contexts=[discord.InteractionContextType.guild],)one:
                 updates["access_method"] = access_method
                 
             if not updates:
@@ -302,7 +299,7 @@ class ServerCommands(commands.Cog):
                 return await ctx.respond("⚠️ Database connection not available", ephemeral=True)
                 
             # Get the server document
-            server = await Server.get_by_name(self.db, name, ctx.guild.id)
+            server = await Server.ge@server_group.command(name="status", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@server_group.command(name="status", contexts=[discord.InteractionContextType.guild],)d)
             
             if not server:
                 return await ctx.respond(f"Server '{name}' not found. Use `/server list` to see available servers.", ephemeral=True)

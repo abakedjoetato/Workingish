@@ -472,19 +472,8 @@ async def sync_slash_commands():
             logger.error(f"Error using minimal sync: {min_err}")
             # Continue with standard method as fallback
         
-        # We'll still need the command fixes though
-        try:
-            from utils.command_fix import apply_command_fixes, patch_discord_internals
-            
-            # Apply the monkey patch to Discord internals
-            if patch_discord_internals():
-                logger.info("✅ Successfully patched Discord.py internals for improved command handling")
-            else:
-                logger.warning("⚠️ Could not patch Discord.py internals, will rely on command-by-command fixes")
-            
-            # Apply fixes to all command groups in all cogs
-            fixed_count = apply_command_fixes(bot)
-            logger.info(f"🔧 Applied fixes to {fixed_count} command objects")
+        # Command fixes are now applied permanently in source files
+        logger.info("✅ Using permanently fixed command definitions from source files")
             
             # Get home_guild_id for guild-specific command registration
             home_guild_id = None
@@ -1364,23 +1353,9 @@ async def load_cogs():
     if loaded_count > 0:
         logger.info(f"Successfully loaded {loaded_count}/{len(cog_classes)} cogs")
         
-        # Apply command fixes to fix null attributes and patch Discord internals if needed
-        try:
-            from utils.command_fix import apply_command_fixes, patch_discord_internals
-            
-            # First try to patch Discord internals for a more reliable fix
-            if patch_discord_internals():
-                logger.info("Successfully patched Discord internals for better command handling")
-            else:
-                logger.info("Could not patch Discord internals, will rely on command-by-command fixes")
-            
-            # Apply fixes to all command groups
-            fixed_count = apply_command_fixes(bot)
-            logger.info(f"Applied command fixes to {fixed_count} command groups")
-        except Exception as e:
-            logger.error(f"Error applying command fixes: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+        # Command fixes are now applied permanently in source files
+        # No need for runtime fixes anymore
+        logger.info("Using permanently fixed command definitions from source files")
     else:
         logger.error("No cogs were loaded successfully")
 

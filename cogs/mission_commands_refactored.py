@@ -79,6 +79,9 @@ class MissionCommands(commands.Cog):
     @mission_group.command(
         name="channel",
         description="Set a channel for mission notifications", 
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@mission_group.command(
+        name="channel",
+        description="Set a channel for mission notifications", 
         contexts=[discord.InteractionContextType.guild],)
     async def mission_channel(
         self, 
@@ -147,13 +150,10 @@ class MissionCommands(commands.Cog):
                 inline=False
             )
             
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error setting mission channel: {e}")
-            await ctx.respond(f"❌ Error setting mission channel: {str(e)}", ephemeral=True)
-            
-    @mission_group.command(
+            await ctx.respond(em@mission_group.command(
+        name="toggle",
+        description="Enable or disable mission notifications", 
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@mission_group.command(
         name="toggle",
         description="Enable or disable mission notifications", 
         contexts=[discord.InteractionContextType.guild],
@@ -233,12 +233,10 @@ class MissionCommands(commands.Cog):
                 )
             
             await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error toggling mission notifications: {e}")
-            await ctx.respond(f"❌ Error toggling mission notifications: {str(e)}", ephemeral=True)
-            
     @mission_group.command(
+        name="status",
+        description="Check mission notification settings",
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@mission_group.command(
         name="status",
         description="Check mission notification settings",
         contexts=[discord.InteractionContextType.guild],
@@ -364,13 +362,10 @@ class MissionCommands(commands.Cog):
                     inline=False
                 )
             
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error checking mission status: {e}")
-            await ctx.respond(f"❌ Error checking mission status: {str(e)}", ephemeral=True)
-    
-    @mission_group.command(
+            await ctx.respond(@mission_group.command(
+        name="test",
+        description="Send a test mission notification",
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@mission_group.command(
         name="test",
         description="Send a test mission notification",
         contexts=[discord.InteractionContextType.guild]

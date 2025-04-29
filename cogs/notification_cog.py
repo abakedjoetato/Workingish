@@ -502,6 +502,8 @@ class NotificationCog(commands.Cog):
     
     @notifications_group.command(
         name="killfeed",
+        description="Configure automatic killfeed notifications for this server", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@notifications_group.command(
+        name="killfeed",
         description="Configure automatic killfeed notifications for this server", contexts=[discord.InteractionContextType.guild],)
     @commands.has_permissions(manage_channels=True)
     @guild_only()
@@ -557,14 +559,10 @@ class NotificationCog(commands.Cog):
                       "`/notifications status` - Check notification settings",
                 inline=False
             )
-            
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error setting up killfeed: {e}")
-            await ctx.respond(f"⚠️ Error setting up killfeed: {e}")
-            
-    @notifications_group.command(
+@notifications_group.command(
+        name="killfeed_filter",
+        description="Customize killfeed notification filters", 
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@notifications_group.command(
         name="killfeed_filter",
         description="Customize killfeed notification filters", 
         contexts=[discord.InteractionContextType.guild],
@@ -631,13 +629,10 @@ class NotificationCog(commands.Cog):
                 inline=False
             )
             
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error setting killfeed filters: {e}")
-            await ctx.respond(f"⚠️ Error setting killfeed filters: {e}")
-            
-    @notifications_group.command(
+@notifications_group.command(
+        name="join_leave",
+        description="Configure player join/leave notifications", 
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@notifications_group.command(
         name="join_leave",
         description="Configure player join/leave notifications", 
         contexts=[discord.InteractionContextType.guild],
@@ -697,10 +692,11 @@ class NotificationCog(commands.Cog):
                 inline=False
             )
             
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error setting up join/leave notifications: {e}")
+            await ctx.respond(@notifications_group.command(
+        name="player_count",
+        description="Configure voice channel player count updates", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@notifications_group.command(
+        name="player_count",
+        description="Configure voice channel player count updates", contexts=[discord.InteractionContextType.guild],))
             await ctx.respond(f"⚠️ Error setting up join/leave notifications: {e}")
             
     

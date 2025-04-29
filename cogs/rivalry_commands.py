@@ -45,6 +45,8 @@ class RivalryCommands(commands.Cog):
     
     @rivalry_group.command(
         name="update",
+        description="Update rivalry tracking data for a server [Premium Only]", contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
+        name="update",
         description="Update rivalry tracking data for a server [Premium Only]", contexts=[discord.InteractionContextType.guild],)
     @premium_server()
     @server_exists()
@@ -100,14 +102,10 @@ class RivalryCommands(commands.Cog):
                 inline=False
             )
             
-            await message.edit_original_response(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error in update_rivalry: {e}")
-            traceback.print_exc()
-            await ctx.respond(f"An error occurred: {str(e)}")
-            
-    @rivalry_group.command(
+            await message.edit_original_re@rivalry_group.command(
+        name="nemesis",
+        description="View nemesis information for a player [Premium Only]", 
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
         name="nemesis",
         description="View nemesis information for a player [Premium Only]", 
         contexts=[discord.InteractionContextType.guild]
@@ -214,14 +212,10 @@ class RivalryCommands(commands.Cog):
                 inline=True
             )
             
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error in nemesis: {e}")
-            traceback.print_exc()
-            await ctx.respond(f"An error occurred: {str(e)}")
-            
-    @rivalry_group.command(
+          @rivalry_group.command(
+        name="prey",
+        description="View prey information for a player [Premium Only]", 
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
         name="prey",
         description="View prey information for a player [Premium Only]", 
         contexts=[discord.InteractionContextType.guild]
@@ -328,14 +322,10 @@ class RivalryCommands(commands.Cog):
                 inline=True
             )
             
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error in prey: {e}")
-            traceback.print_exc()
-            await ctx.respond(f"An error occurred: {str(e)}")
-            
-    @rivalry_group.command(
+            a@rivalry_group.command(
+        name="relationships",
+        description="View kill relationships between a player and others [Premium Only]", 
+        contexts=[discord.InteractionContextType.guild], integration_types=[discord.IntegrationType.guild_install],)@rivalry_group.command(
         name="relationships",
         description="View kill relationships between a player and others [Premium Only]", 
         contexts=[discord.InteractionContextType.guild]
