@@ -56,9 +56,9 @@ def fix_file(file_path):
             end_pos = match.start() + attrs_match.end() - 1
             fixed_attrs = attr_str.rstrip()
             if fixed_attrs.endswith(','):
-                fixed_attrs += '\n        integration_types=[discord.ApplicationIntegrationType.guild_install],'
+                fixed_attrs += '\n        integration_types=[discord.IntegrationType.guild_install],'
             else:
-                fixed_attrs += ',\n        integration_types=[discord.ApplicationIntegrationType.guild_install],'
+                fixed_attrs += ',\n        integration_types=[discord.IntegrationType.guild_install],'
                 
             # Replace the attribute string
             content = content[:match.start() + attrs_match.start(1)] + fixed_attrs + content[match.start() + attrs_match.end(1):]

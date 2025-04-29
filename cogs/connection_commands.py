@@ -82,7 +82,7 @@ class ConnectionCommands(commands.Cog):
         name="channel",
         description="Set the channel for connection notifications",
         contexts=[discord.InteractionContextType.guild],
-        integration_types=[discord.ApplicationIntegrationType.guild_install],
+        integration_types=[discord.IntegrationType.guild_install],
     )
     async def set_channel(self, ctx, 
                          channel: discord.Option(discord.TextChannel, "Channel to send notifications to", required=False) = None):
@@ -138,7 +138,7 @@ class ConnectionCommands(commands.Cog):
         name="disable", 
         description="Disable connection notifications for this guild", 
         contexts=[discord.InteractionContextType.guild],
-        integration_types=[discord.ApplicationIntegrationType.guild_install],
+        integration_types=[discord.IntegrationType.guild_install],
     )
     async def disable_connections(self, ctx):
         """Disable connection notifications for this guild"""
@@ -171,7 +171,7 @@ class ConnectionCommands(commands.Cog):
         name="list", 
         description="List recent player connections for a server", 
         contexts=[discord.InteractionContextType.guild],
-        integration_types=[discord.ApplicationIntegrationType.guild_install],
+        integration_types=[discord.IntegrationType.guild_install],
     )
     async def list_connections(self, ctx, 
                                server_name: discord.Option(str, "Server name to show connections for", required=False) = None,
